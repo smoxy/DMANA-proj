@@ -20,6 +20,7 @@ custom$winter <- ifelse(custom$stdMonth==-0.72,1,
                                       ifelse(custom$stdMonth==0.53,1,
                                              ifelse(custom$stdMonth==1.59,1,
                                                     ifelse(custom$stdMonth==1.68,1,0))))))
+custom$winter <- as.factor(custom$winter)
 
 custom %>% group_by(hh_key) %>% summarize(n_ppl = n())
 
@@ -68,21 +69,21 @@ ggplot(data = monthGroup, aes(x = monthnumb, y = avgItem, group=as.factor(winter
 
 
 
-ggplot(data = custom, aes(x = hh_key, y = item, group=as.factor(pricepromo), color=as.factor(pricepromo))) + 
+ggplot(data = custom, aes(x = monthnumb, y = item, group=as.factor(pricepromo), color=as.factor(pricepromo))) + 
   geom_boxplot()+
   scale_x_continuous(name = "time [years]",breaks = c(0,12,24,36), labels = c(0,1,2,3))+
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(title="Purchased items per price promotion over time",y="n. items",color = "N° of price promotions")
 
 as.matrix(tapply(custom$item, list(gender,married), mean))
-#############################################################
-formula=item~retailpromo+catalogpromo+gender+married+winter
+################################################################
+formula=item~pricepromo+retailpromo+catalogpromo+gender+married+winter
 fm_pois <- glm(formula, data = custom, family = poisson)
 fm_qpois <- glm(formula, data = custom, family = quasipoisson)
 fm_nbin <- glm.nb(formula, data = custom)
 fm_hurdle <- hurdle(formula, data = custom, dist = "negbin")
 fm_zinb <- zeroinfl(formula, data = custom, dist = "negbin")
-#############################################################
+################################################################
 summaryModels <- function(numb){
   fm <- list("ML-Pois" = fm_pois, "Quasi-Pois" = fm_qpois, "NB" = fm_nbin,
              "Hurdle-NB" = fm_hurdle, "ZINB" = fm_zinb)
@@ -99,4 +100,49 @@ summaryModels <- function(numb){
 }
 
 
-rootogram(model8, max = 30)
+rootogram(fm_hurdle, max = 30)
+plot(factor(item==0)~retailpromo+catalogpromo+gender+married+winter,data=custom,main="Zero")
+plot(factor(item>0)~retailpromo+catalogpromo+gender+married+winter,data=custom,main="Zero")
+
+# Overall variations
+custom %>% 
+  select(item, retailpromo, catalogpromo) %>% 
+  mutate_all(function(x) {x - mean(x)}) %>% # variable - overall mean
+  as.data.frame %>% 
+  stargazer(type = "text", omit.summary.stat = "mean")
+
+# Between variations
+custom %>% group_by(hh_key) %>%
+  select(item, retailpromo, catalogpromo) %>% 
+  summarize_all(mean) %>% 
+  as.data.frame %>% 
+  select(-hh_key) %>%
+  stargazer(type = "text")
+
+# Within variations
+custom %>% group_by(hh_key) %>% 
+  select(item, retailpromo, catalogpromo) %>% 
+  mutate_all(function(x) {x - mean(x)}) %>% # demean
+  as.data.frame %>% 
+  select(-hh_key) %>%
+  stargazer(type = "text", omit.summary.stat = "mean")
+
+# Generate first differences
+diff <- function(x) {x - dplyr::lag(x)}
+fd <- custom %>% group_by(hh_key) %>%
+  mutate(ditem = diff(item), 
+         dretailpromo = diff(retailpromo), 
+         dcatalogpromo = diff(catalogpromo))%>%
+  select(hh_key, monthnumb, item, retailpromo, catalogpromo, 
+         ditem, dretailpromo, dcatalogpromo)%>% 
+  .[order(.$hh_key, .$monthnumb),]
+
+summary(lm(item ~ ., data = fd))
+  
+
+fm_hurdle1 <- mixed_model(item ~ retailpromo+catalogpromo+gender+married+winter, 
+                          random = ~ 1 | hh_key, 
+                          data = custom, 
+                          family = hurdle.negative.binomial(), 
+                          zi_fixed = ~retailpromo+catalogpromo+gender+married+winter,
+                          zi_random = ~ 1 | hh_key)
