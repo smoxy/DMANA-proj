@@ -9,24 +9,32 @@
 #   wagepan.csv
 
 # setup
-rm(list = ls()) 
-directory <- "C:/Econometrics/DataR/"
+
 
 # Install packages
-PackageNames <- c("tidyverse", "stargazer", "magrittr", "haven")
-for(i in PackageNames){
+for(i in c("tidyverse", "stargazer", "magrittr", "haven")){
   if(!require(i, character.only = T)){
     install.packages(i, dependencies = T)
     require(i, character.only = T)
   }
 }
 
+wagepan <- read_stata("Z://DesktopC//LUMSA//2//Data Mining//wagepan.dta")
+
+wagepan$nr <- as.factor(wagepan$nr)
+wagepan$year <- as.factor(wagepan$year)
+
 # Keep only two years of data
-wagepan %<>% filter(year == 1980 | year == 1981)
+#wagepan %<>% filter(year == 1980 | year == 1981)
 
 # Generate dummy for year and interaction term
-wagepan %<>% mutate(d1981 = (year == 1981),
-                    d1981hours = d1981*hours)
+wagepan %<>% mutate(d81hours = d81*hours,
+                    d82hours = d82*hours,
+                    d83hours = d83*hours,
+                    d84hours = d84*hours,
+                    d85hours = d85*hours,
+                    d86hours = d86*hours,
+                    d87hours = d87*hours)
 
 # Get wage from log(wage)
 wagepan %<>% mutate(wage = 10^lwage)
@@ -74,7 +82,7 @@ model6 <- lm(wage ~ hours + educ + exper, wagepan)
 summary(model6)
 model7 <- lm(wage ~ hours, wagepan)
 summary(model7)
-model8 <- lm(wage ~ hours + educ + exper + d1981, wagepan)
+model8 <- lm(wage ~ hours + educ + exper + d81, wagepan)
 summary(model8)
 
 # Regression models for each year
@@ -84,7 +92,7 @@ model10 <- update(model7, subset = year == 1981)
 summary(model10)
 
 # Regression model with different intercept and slope for both years
-model11 <- lm(wage ~ d1981 + hours + d1981hours, wagepan)
+model11 <- lm(wage ~ hours + d81+d82+d83+d84+d85+d86+d87+d81hours+d82hours+d83hours+d84hours+d85hours+d86hours+d87hours, wagepan)
 summary(model11)
 
 # Generate first differences
@@ -98,7 +106,7 @@ wagepan %<>% group_by(nr) %>%
 wagepan %>% 
   select(nr, year, wage, hours, educ, exper, 
          dwage, dhours, deduc, dexper) %>% 
-  head(10)
+  head(16)
 
 # Panel data model with first differences
 # Cannot be estimated due to perfect collinearity of deduc and dexper
