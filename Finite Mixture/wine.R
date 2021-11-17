@@ -12,7 +12,7 @@ fit <- selm(olo.ph ~ 1, family="SN")
 plot(fit, which=2:3)
 ################################################################################
 library("car")
-scatterplotMatrix(wine[2:6])
+scatterplotMatrix(wines[2:6])
 text(wine$`Fixed Acidity`, wine$`Tartaric Acid`, wine$Type, cex=0.7, pos=4, col="red")
 makeProfilePlot <- function(mylist,names)
 {
@@ -384,3 +384,46 @@ calcAllocationRuleAccuracy <- function(ldavalue, groupvariable, cutoffpoints)
   }
 }
 calcAllocationRuleAccuracy(wine.lda.values$x[,1], wine[1], c(-1.751107, 2.122505))
+##########
+
+
+
+makeProfilePlot <- function(mylist,names)
+{
+  require(RColorBrewer)
+  numvariables <- length(mylist)
+  colours <- brewer.pal(numvariables,"Set1")
+  mymin <- 1e+20
+  mymax <- 1e-20
+  for (i in 1:numvariables)
+  {
+    vectori <- mylist[[i]]
+    mini <- min(vectori)
+    maxi <- max(vectori)
+    if (mini < mymin) { mymin <- mini }
+    if (maxi > mymax) { mymax <- maxi }
+  }
+  for (i in 1:numvariables)
+  {
+    vectori <- mylist[[i]]
+    namei <- names[i]
+    colouri <- colours[i]
+    if (i == 1) {
+      #View(as.data.frame(vectori))
+      #plot(vectori,col=colouri,type="l",ylim=c(mymin,mymax),main='')
+      varPlot <- ggplot(data=as.data.frame(vectori),aes(x=vectori), colour = colouri)
+      varPlot
+    } else {
+      varPlot +
+        geom_point(data=as.data.frame(vectori),color=colouri)
+      }
+    lastxval <- length(vectori)
+    lastyval <- vectori[length(vectori)]
+    #text((lastxval),(lastyval),namei,col="black",cex=0.8)
+
+    return(varPlot)
+  }
+}
+names <- colnames(wines[,c(2:5)])
+mylist <- as.list(wines[,c(2:5)])
+makeProfilePlot(mylist,names)

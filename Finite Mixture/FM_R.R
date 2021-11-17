@@ -224,11 +224,11 @@ require(Rmixmod)
 require(glasso)
 #
 #x.data <- banknote[,-1]
-x.data <- wine[,-1]
-clust.vscc <- vscc(x.data, G=1:5, automate = "mclust", initial = NULL, train = NULL, forcereduction = FALSE)
-head(clust.vscc$topselected) #Show preview of selected variables
-table(wine[,1], clust.vscc$initialrun$classification) #Clustering results on full data set
-table(wine[,1], clust.vscc$bestmodel$classification) #Clustering results on reduced data set
+x.data <- wines[,-1]
+clust.vscc.teigen <- vscc(x.data, G=1:5, automate = "teigen", initial = NULL, train = NULL, forcereduction = FALSE)
+head(clust.vscc.mclust$topselected) #Show preview of selected variables
+table(wines[,1], clust.vscc.mclust$initialrun$classification) #Clustering results on full data set
+table(wines[,1], clust.vscc.mclust$bestmodel$classification) #Clustering results on reduced data set
 #
 clust <- clustvarsel(x.data,G=1:5)
 clust$subset
