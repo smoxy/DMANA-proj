@@ -1,0 +1,189 @@
+---
+title: "Multivariate data analysis: a discriminating method of the origin of wines"
+output: html_notebook
+author: 'Matteo Fasulo, Simone Flavio Paris, Matteo Sivoccia'
+---
+```{r loadEnv, message=FALSE, warning=FALSE}
+source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
+loadPackages(c('sn','tidyverse','car','RColorBrewer','stargazer','mclust','ContaminatedMixt'))
+load("Z:/DesktopC/LUMSA/2/Data Mining/Finite Mixture/FiniteMixtureL31.RData")
+rm(CO2data)
+rm(NOdata)
+rm(tonedata)
+type <- wine$Type
+rm(wine)
+```
+Dati su 27 caratteristiche chimico/fisiche di tre diversi tipi di vino (Barolo, Grignolino, Barbera)
+dal Piemonte. Un set di dati con 178 osservazioni e 28 variabili (di cui la prima relativa alla tipologia di vino). Nell'ordine: 
+
+- Barolo 
+- Grignolino
+- Barbera
+
+E' stato possibile attraverso la ricerca originaria risalire all'anno di osservazione di ciascun vino. Di seguito vengono riportate le osservazioni dei tre diversi tipi di vino durante gli anni:
+
+```{r vinoAnni, message=FALSE, warning=FALSE}
+data(wines)
+year <- as.numeric(substr(rownames(wines), 6, 7))
+table(wines$wine, year)
+```
+
+Per quanto riguarda la numerosità delle singole classi:
+
+```{r nClassi, message=FALSE, warning=FALSE}
+wines %>%
+  count(wine = factor(wine)) %>%
+  mutate(pct = prop.table(n)) %>% 
+  ggplot(aes(x = wine, y = pct, fill = wine, label = scales::percent(pct))) + 
+  geom_col(position = 'dodge') + 
+  geom_text(position = position_dodge(width = .9),
+            vjust = -0.5, 
+            size = 3) + 
+  scale_y_continuous(name = "Percentage")+
+  scale_x_discrete(name = "Wine Name")+
+  scale_fill_hue(l=40, c=35)+
+  theme(legend.position = "none")
+```
+
+
+```{r scatterPlot, message=FALSE, warning=FALSE}
+wines[,'wine'] <- type # fix wine name in numeric
+scatterplotMatrix(wines[2:10])
+scatterplotMatrix(wines[11:20])
+scatterplotMatrix(wines[21:28])
+```
+Nella *matrix scatterplot*, le celle sulla diagonale mostrano gli istogrammi di ognuna delle variabili, in questo caso le concentrazioni delle prime 10 caratteristiche chimiche. Ognuna delle celle fuori dalla diagonale, rappresenta lo scatterplot di 2 delle 10 caratteristiche.
+```{r descriptive, message=FALSE, warning=FALSE}
+printMeanAndSdByGroup <- function(variables,groupvariable)
+  {
+     variablenames <- c(names(groupvariable),names(as.data.frame(variables)))
+     groupvariable <- groupvariable[,1]
+     means <- aggregate(as.matrix(variables) ~ groupvariable, FUN = mean)
+     names(means) <- variablenames
+     print(paste("Means:"))
+     print(means)
+     sds <- aggregate(as.matrix(variables) ~ groupvariable, FUN = sd)
+     names(sds) <- variablenames
+     print(paste("Standard deviations:"))
+     print(sds)
+}
+printMeanAndSdByGroup(wines[2:28],wines[1])
+```
+
+```{r withinVariance, message=FALSE, warning=FALSE}
+calcWithinGroupsVariance <- function(variable,groupvariable)
+  {
+     # find out how many values the group variable can take
+     groupvariable2 <- as.factor(groupvariable[[1]])
+     levels <- levels(groupvariable2)
+     numlevels <- length(levels)
+     # get the mean and standard deviation for each group:
+     numtotal <- 0
+     denomtotal <- 0
+     for (i in 1:numlevels)
+     {
+        leveli <- levels[i]
+        levelidata <- variable[groupvariable==leveli,]
+        levelilength <- length(levelidata)
+        # get the standard deviation for group i:
+        sdi <- sd(levelidata)
+        numi <- (levelilength - 1)*(sdi * sdi)
+        denomi <- levelilength
+        numtotal <- numtotal + numi
+        denomtotal <- denomtotal + denomi
+     }
+     # calculate the within-groups variance
+     Vw <- numtotal / (denomtotal - numlevels)
+     return(Vw)
+}
+calcWithinGroupsVariance(wines[2],wines[1])
+```
+```{r betweenVariance}
+calcBetweenGroupsVariance <- function(variable,groupvariable)
+  {
+     # find out how many values the group variable can take
+     groupvariable2 <- as.factor(groupvariable[[1]])
+     levels <- levels(groupvariable2)
+     numlevels <- length(levels)
+     # calculate the overall grand mean:
+     grandmean <- sapply(variable,mean)
+     # get the mean and standard deviation for each group:
+     numtotal <- 0
+     denomtotal <- 0
+     for (i in 1:numlevels)
+     {
+        leveli <- levels[i]
+        levelidata <- variable[groupvariable==leveli,]
+        levelilength <- length(levelidata)
+        # get the mean and standard deviation for group i:
+        meani <- mean(levelidata)
+        sdi <- sd(levelidata)
+        numi <- levelilength * ((meani - grandmean)^2)
+        denomi <- levelilength
+        numtotal <- numtotal + numi
+        denomtotal <- denomtotal + denomi
+     }
+     # calculate the between-groups variance
+     Vb <- numtotal / (numlevels - 1)
+     Vb <- Vb[[1]]
+     return(Vb)
+}
+calcBetweenGroupsVariance (wines[2],wines[1])
+```
+
+```{r dldldl, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE}
+x.dist=dist(wines[,-1],method="euclidean")
+hc.single=hclust(x.dist,method="single",members=NULL)
+hc.complete=hclust(x.dist,method="complete",members=NULL)
+hc.average=hclust(x.dist,method="average",members=NULL)
+hc.ward=hclust(x.dist,method="ward.D",members=NULL)
+k.means <- kmeans(wines[,-1],centers=3,nstart = 50)
+mixt.wines <- Mclust(wine[,-1],G=1:8)
+mixt.cn.wines <- CNmixt(wines[, -1], G = 1:4, initialization = "kmeans", seed = 1234, parallel = FALSE, verbose = F)
+plot(hc.single)
+plot(hc.complete)
+plot(hc.average)
+plot(hc.ward)
+hicluste1=cutree(hc.single,k=4)
+hicluste2=cutree(hc.complete,k=4)
+hicluste3=cutree(hc.average,k=3)
+hicluste4=cutree(hc.ward,k=3)
+table(wines[,1],hicluste1)
+table(wines[,1],hicluste2)
+table(wines[,1],hicluste3)
+table(wines[,1],hicluste4)
+adjustedRandIndex(wines[,1],hicluste1)
+adjustedRandIndex(wines[,1],hicluste2)
+adjustedRandIndex(wines[,1],hicluste3)
+adjustedRandIndex(wines[,1],hicluste4)
+table(wines[,1],k.means$cluster)
+adjustedRandIndex(wines[,1],k.means$cluster)
+table(wines[,1],mixt.wines$classification)
+adjustedRandIndex(wines[,1],mixt.wines$classification)
+whichBestModel <- function(contaminatedModel, dataset){
+  n.models <- length(contaminatedModel$models)
+  maxAdjRIndex <- -Inf
+  bestModel <- NULL
+  fit <- NULL
+  G <- NULL
+  contaminated <- NULL
+  for (i in 1:n.models){
+    if (adjustedRandIndex(dataset,contaminatedModel$models[[i]]$group) > maxAdjRIndex){
+      maxAdjRIndex <- adjustedRandIndex(dataset,contaminatedModel$models[[i]]$group)
+      bestModel <- contaminatedModel$models[[i]]$model
+      fit <- table(dataset,contaminatedModel$models[[i]]$group)
+      G <- contaminatedModel$models[[i]]$G
+      contaminated <-contaminatedModel$models[[i]]$contamination
+      bestI <- i
+    }
+  }
+  return(list(modelNum = bestI, 
+              comingModel = bestModel, 
+              G = G, 
+              isContaminated = contaminated, 
+              fit = fit, 
+              AdjustedRandIndex = maxAdjRIndex,
+              ))
+}
+whichBestModel(mixt.cn.wines, wines[,1])
+```
