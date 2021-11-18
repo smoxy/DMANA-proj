@@ -12,3 +12,14 @@ https://www.youtube.com/watch?v=ZEftL_fnNGQ
 - risultato <- table(mario$Y, pippo$map)
 - rownames(risultato) <- c('71','73','74','70','71','72','73','74','75','76','74','76','78','79')
 - t(risultato)
+
+## QUALI MODELLI?
+- Euclidea Ward
+- Mahalanobis Ward
+- Kmeans
+- PAM
+- Mclust
+- CNmixt
+- tclust (trimming)
+- teigen
+- pgmmEM
