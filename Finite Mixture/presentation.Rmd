@@ -5,8 +5,9 @@ author: 'Matteo Fasulo, Simone Flavio Paris, Matteo Sivoccia'
 ---
 ```{r loadEnv, message=FALSE, warning=FALSE}
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
-loadPackages(c('sn','tidyverse','car','RColorBrewer','stargazer','mclust','ContaminatedMixt'))
-load("C:\\Users\\Matte\\Documents\\LUMSA\\Data Mining\\finite_mixture\\FiniteMixtureL31.RData")
+loadPackages(c('sn','tidyverse','car','RColorBrewer','stargazer','mclust','ContaminatedMixt',
+               'plotly','ggplot2','ggdendro','pgmm','teigen','tclust','HDMD'))
+load("Z:\\DesktopC\\LUMSA\\2\\Data Mining\\Finite Mixture\\FiniteMixtureL31.RData")
 rm(CO2data)
 rm(NOdata)
 rm(tonedata)
@@ -132,30 +133,39 @@ calcBetweenGroupsVariance (wines[2],wines[1])
 ```
 
 ```{r dldldl, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE}
-x.dist=dist(wines[,-1],method="euclidean")
-hc.single=hclust(x.dist,method="single",members=NULL)
-hc.complete=hclust(x.dist,method="complete",members=NULL)
-hc.average=hclust(x.dist,method="average",members=NULL)
-hc.ward=hclust(x.dist,method="ward.D",members=NULL)
-k.means <- kmeans(wines[,-1],centers=3,nstart = 50)
-mixt.wines <- Mclust(wines[,-1],G=1:8)
-mixt.cn.wines <- CNmixt(wines[, -1], G = 1:4, initialization = "kmeans", seed = 1234, parallel = FALSE, verbose = F)
-plot(hc.single)
-plot(hc.complete)
-plot(hc.average)
-plot(hc.ward)
-hicluste1=cutree(hc.single,k=4)
-hicluste2=cutree(hc.complete,k=4)
-hicluste3=cutree(hc.average,k=3)
-hicluste4=cutree(hc.ward,k=3)
-table(wines[,1],hicluste1)
-table(wines[,1],hicluste2)
+# DISTANCE
+x.euclidean   <- dist(scale(wines[,-1]), method="euclidean")
+dissMatrix    <- as.dist(pairwise.mahalanobis(wines[,-1], grouping = c(1:nrow(wines)), cov = cov(wines[,-1]))$distance)
+eucl.hc.ward  <- hclust(x.euclidean,method="ward.D2")
+maha.hc.ward  <- hclust(dissMatrix,method="ward.D2")
+
+ggplotly(ggdendrogram(eucl.hc.ward, rotate = F, size = 2, leaf_labels = T, labels = F))
+hicluste3=cutree(eucl.hc.ward,k=3)
 table(wines[,1],hicluste3)
+hicluste1=cutree(eucl.hc.ward,k=4)
+table(wines[,1],hicluste1)
+
+ggplotly(ggdendrogram(maha.hc.ward, rotate = F, size = 2, leaf_labels = T, labels = F))
+hicluste4=cutree(maha.hc.ward,k=3)
 table(wines[,1],hicluste4)
-adjustedRandIndex(wines[,1],hicluste1)
-adjustedRandIndex(wines[,1],hicluste2)
-adjustedRandIndex(wines[,1],hicluste3)
-adjustedRandIndex(wines[,1],hicluste4)
+hicluste2=cutree(maha.hc.ward,k=4)
+table(wines[,1],hicluste2)
+
+k.means.3 <- kmeans(scale(wines[,-1]),centers=3,nstart = 50, iter.max = 100)
+k.means.4 <- kmeans(scale(wines[,-1]),centers=4,nstart = 50, iter.max = 100)
+
+mixt.wines <- Mclust(wines[,-1],G=3:8)                                  # EM Alg for Finite gaussian mixture models
+mixt.cn.wines.mixt.3 <- CNmixt(wines[,-1], G = 3, initialization = "mixt", seed = 1234, parallel = F, verbose = F)
+mixt.cn.wines.kmeans <- CNmixt(wines[,-1], G = 3, initialization = "kmeans", seed = 1234, parallel = F, verbose = F)
+mixt.cn.wines.rpost <- CNmixt(wines[,-1], G = 3, initialization = "random.post", seed = 1234, parallel = F, verbose = F)
+mixt.cn.wines.rclass <- CNmixt(wines[,-1], G = 3, initialization = "random.clas", seed = 1234, parallel = F, verbose = F)
+
+agree(mixt.cn.wines.mixt.3, givgroup = wines[,1])
+agree(mixt.cn.wines.kmeans, givgroup = wines[,1])
+agree(mixt.cn.wines.rpost, givgroup = wines[,1])
+agree(mixt.cn.wines.rclass, givgroup = wines[,1])
+plot(mixt.cn.wines.mixt.3, contours = TRUE)
+
 table(wines[,1],k.means$cluster)
 adjustedRandIndex(wines[,1],k.means$cluster)
 table(wines[,1],mixt.wines$classification)
@@ -167,6 +177,8 @@ whichBestModel <- function(contaminatedModel, dataset){
   bestModel <- NULL
   fit <- NULL
   G <- NULL
+  bic <- NULL
+  icl <- NULL
   contaminated <- NULL
   for (i in 1:n.models){
     if (adjustedRandIndex(dataset,contaminatedModel$models[[i]]$group) > maxAdjRIndex){
@@ -177,6 +189,8 @@ whichBestModel <- function(contaminatedModel, dataset){
       G <- contaminatedModel$models[[i]]$G
       contaminated <-contaminatedModel$models[[i]]$contamination
       bestI <- i
+      bic <- contaminatedModel$models[[i]]$IC$BIC
+      icl <- contaminatedModel$models[[i]]$IC$ICL
     }
   }
   return(list(result = result,
@@ -185,25 +199,66 @@ whichBestModel <- function(contaminatedModel, dataset){
               G = G, 
               isContaminated = contaminated, 
               fit = fit, 
-              AdjustedRandIndex = maxAdjRIndex))
+              AdjustedRandIndex = maxAdjRIndex,
+              BIC = bic,
+              ICL = icl))
 }
 whichBestModel(mixt.cn.wines, wines[,1])
 ```
+
 ```{r summaryOfAllModel, message=FALSE, warning=FALSE}
 summaryOfModels <- function(df, models){
+  require(mclust)
   nModel <- length(models)
   ari <- NULL
+  bic <- NULL
+  icl <- NULL
+  G <- NULL
   for(i in 1:nModel){
-    if (class(models[[i]])=='Mclust'){
+           if (class(models[[i]])=='kmeans'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$cluster)
+      bic[i] <- NA
+      icl[i] <- NA
+      G[i] <- length(unique(models[[i]]$cluster))
+    } else if (class(models[[i]])=='Mclust'){
       ari[i] <- adjustedRandIndex(df,models[[i]]$classification)
+      bic[i] <- models[[i]]$bic
+      icl[i] <- models[[i]]$icl
+      G[i] <- models[[i]]$G
     } else if (class(models[[i]])=='ContaminatedMixt'){
       ari[i] <- adjustedRandIndex(df,whichBestModel(models[[i]],df)$result)
+      bic[i] <- whichBestModel(models[[i]],df)$BIC
+      icl[i] <- whichBestModel(models[[i]],df)$ICL
+      G[i] <- whichBestModel(models[[i]],df)$G
+    } else if (class(models[[i]])=='teigen'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$iclresults$classification)
+      bic[i] <- models[[i]]$bic
+      icl[i] <- models[[i]]$iclresults$icl
+      G[i] <- models[[i]]$G
+    } else if (class(models[[i]])=='pgmm'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$map)
+      G[i] <- models[[i]]$g
+      ifelse(is.null(models[[i]]$bic[1])==TRUE,
+             bic[i] <- NA,
+             bic[i] <- as.double(models[[i]]$bic[1]))
+      ifelse(is.null(models[[i]]$icl[1])==TRUE,
+             icl[i] <- NA,
+             icl[i] <- as.double(models[[i]]$icl[1]))
+    } else if (class(models[[i]])=='tkmeans'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$cluster)
+      G[i] <- models[[i]]$k
+      bic[i] <- NA
+      icl[i] <- NA
     }
   }
-  outputDF <- data.frame('AdjustedRandIndex'=ari,
+  outputDF <- data.frame('AdjustedRandIndex' = ari,
+                         'BIC' = bic,
+                         'ICL' = icl,
+                         'G' = as.integer(G),
+                         row.names = c('KMeans','Mclust','ContaminatedMixt','TEigen','PGMM','TClust'),
                          stringsAsFactors = F)
   return(outputDF)
 }
-test <- summaryOfModels(wines[,1],list(mixt.wines,mixt.cn.wines))
+test <- summaryOfModels(wines[,1],list(k.means,mixt.wines,mixt.cn.wines,teigen_wine,pippo,trimmedOne))
 test
 ```
