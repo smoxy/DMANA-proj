@@ -260,7 +260,7 @@ lasso$U
 lasso$nbcluster
 table(lasso$partition,banknote[,1])
 #
-y.data <- wine[,-1]
+y.data <- wines[,-1]
 wine.mclust <- Mclust(y.data,G=1:5)
 summary(wine.mclust)
 table(wine[,1],wine.mclust$classification)
@@ -277,8 +277,8 @@ miss.clus <- wine[,1]-wine.kmeans$cluster
 miss.clus.color <- rep(1,length(miss.clus))
 miss.clus.color[miss.clus!=0] <- 2
 wine.pgmm <- pgmmEM(y.data,rG=3,rq=2,icl=TRUE)
-table(wine[,1],wine.pgmm$map)
-adjustedRandIndex(wine[,1],wine.pgmm$map)
+table(wines[,1],wine.pgmm$map)
+adjustedRandIndex(wines[,1],wine.pgmm$map)
 clust.vscc <- vscc(y.data, G=1:5, automate = "mclust", initial = NULL, train = NULL, forcereduction = FALSE)
 table(wine[,1], clust.vscc$initialrun$classification) #Clustering results on full data set
 table(wine[,1], clust.vscc$bestmodel$classification) #Clustering results on reduced data set
@@ -288,8 +288,8 @@ table(wine[,1],wine.clustvarsel$model$classification)
 adjustedRandIndex(wine[,1],wine.clustvarsel$model$classification)
 km.perm <- KMeansSparseCluster.permute(y.data,K=3,wbounds=seq(3,7,len=15),nperms=5)
 km.out <- KMeansSparseCluster(y.data,K=3,wbounds=km.perm$bestw)
-table(wine[,1],km.out[[1]]$Cs)
-adjustedRandIndex(wine[,1],km.out[[1]]$Cs)
+table(wines[,1],km.out[[1]]$Cs)
+adjustedRandIndex(wines[,1],km.out[[1]]$Cs)
 #
 #
 n <- 200      # sample size

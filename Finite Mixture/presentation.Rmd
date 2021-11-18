@@ -1,10 +1,11 @@
 ---
-title: "Multivariate data analysis as a discriminating method of the origin of wines"
+title: "Multivariate data analysis: a discriminating method of the origin of wines"
 output: html_notebook
+author: 'Matteo Fasulo, Simone Flavio Paris, Matteo Sivoccia'
 ---
 ```{r loadEnv, message=FALSE, warning=FALSE}
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
-loadPackages(c('sn','tidyverse','car','RColorBrewer','stargazer'))
+loadPackages(c('sn','tidyverse','car','RColorBrewer','stargazer','mclust','ContaminatedMixt'))
 load("Z:/DesktopC/LUMSA/2/Data Mining/Finite Mixture/FiniteMixtureL31.RData")
 rm(CO2data)
 rm(NOdata)
@@ -48,49 +49,10 @@ wines %>%
 ```{r scatterPlot, message=FALSE, warning=FALSE}
 wines[,'wine'] <- type # fix wine name in numeric
 scatterplotMatrix(wines[2:10])
-#scatterplotMatrix(wines[11:20])
-#scatterplotMatrix(wines[21:28])
+scatterplotMatrix(wines[11:20])
+scatterplotMatrix(wines[21:28])
 ```
 Nella *matrix scatterplot*, le celle sulla diagonale mostrano gli istogrammi di ognuna delle variabili, in questo caso le concentrazioni delle prime 10 caratteristiche chimiche. Ognuna delle celle fuori dalla diagonale, rappresenta lo scatterplot di 2 delle 10 caratteristiche.
-Abbiamo deciso di rappresentare un *profile plot*, che mostra la variazione delle features per ogni osservazione.
-```{r profilePlot, message=FALSE, warning=FALSE}
-makeProfilePlot <- function(mylist,names)
-  {
-     require(RColorBrewer)
-     # find out how many variables we want to include
-     numvariables <- length(mylist)
-     # choose 'numvariables' random colours
-     colours <- brewer.pal(numvariables,"Set1")
-     # find out the minimum and maximum values of the variables:
-     mymin <- 1e+20
-     mymax <- 1e-20
-     for (i in 1:numvariables)
-     {
-        vectori <- mylist[[i]]
-        mini <- min(vectori)
-        maxi <- max(vectori)
-        if (mini < mymin) { mymin <- mini }
-        if (maxi > mymax) { mymax <- maxi }
-     }
-     # plot the variables
-     for (i in 1:numvariables)
-     {
-        vectori <- mylist[[i]]
-        namei <- names[i]
-        colouri <- colours[i]
-        if (i == 1) { plot(vectori,col=colouri,type="l",ylim=c(mymin,mymax)) }
-        else         { points(vectori, col=colouri,type="l")                                     }
-        lastxval <- length(vectori)
-        lastyval <- vectori[length(vectori)]
-        text((lastxval),(lastyval),namei,col="black",cex=0.8)
-     }
-  }
-names <- colnames(wines[,c(2:5)])
-#mylist <- list(wines$alcohol,wines$sugar,wines$acidity,wines$tartaric,wines$malic)
-mylist <- as.list(wines[,c(2:5)])
-makeProfilePlot(mylist,names)
-```
-E' chiaro dal *profile plot* che la *media* e la *deviazione standard* per *acidity* sono molto più elevate delle altre variabili.
 ```{r descriptive, message=FALSE, warning=FALSE}
 printMeanAndSdByGroup <- function(variables,groupvariable)
   {
@@ -108,7 +70,7 @@ printMeanAndSdByGroup <- function(variables,groupvariable)
 printMeanAndSdByGroup(wines[2:28],wines[1])
 ```
 
-```{r overall, message=FALSE, warning=FALSE}
+```{r withinVariance, message=FALSE, warning=FALSE}
 calcWithinGroupsVariance <- function(variable,groupvariable)
   {
      # find out how many values the group variable can take
@@ -135,6 +97,8 @@ calcWithinGroupsVariance <- function(variable,groupvariable)
      return(Vw)
 }
 calcWithinGroupsVariance(wines[2],wines[1])
+```
+```{r betweenVariance}
 calcBetweenGroupsVariance <- function(variable,groupvariable)
   {
      # find out how many values the group variable can take
@@ -166,15 +130,16 @@ calcBetweenGroupsVariance <- function(variable,groupvariable)
 }
 calcBetweenGroupsVariance (wines[2],wines[1])
 ```
-```{r dldldl, message=FALSE, warning=FALSE}
+
+```{r dldldl, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE}
 x.dist=dist(wines[,-1],method="euclidean")
 hc.single=hclust(x.dist,method="single",members=NULL)
 hc.complete=hclust(x.dist,method="complete",members=NULL)
 hc.average=hclust(x.dist,method="average",members=NULL)
 hc.ward=hclust(x.dist,method="ward.D",members=NULL)
 k.means <- kmeans(wines[,-1],centers=3,nstart = 50)
-mixt.wines <- Mclust(wines[,-1],G=1:4)
-mixt.cn.wines <- CNmixt(wines[, -1], G = 3, initialization = "kmeans", seed = 1234, parallel = FALSE)
+mixt.wines <- Mclust(wine[,-1],G=1:8)
+mixt.cn.wines <- CNmixt(wines[, -1], G = 1:4, initialization = "kmeans", seed = 1234, parallel = FALSE, verbose = F)
 plot(hc.single)
 plot(hc.complete)
 plot(hc.average)
@@ -193,23 +158,32 @@ adjustedRandIndex(wines[,1],hicluste3)
 adjustedRandIndex(wines[,1],hicluste4)
 table(wines[,1],k.means$cluster)
 adjustedRandIndex(wines[,1],k.means$cluster)
-table(wines[,1],mixt.diab$classification)
-adjustedRandIndex(wines[,1],mixt.diab$classification)
+table(wines[,1],mixt.wines$classification)
+adjustedRandIndex(wines[,1],mixt.wines$classification)
 whichBestModel <- function(contaminatedModel, dataset){
   n.models <- length(contaminatedModel$models)
   maxAdjRIndex <- -Inf
   bestModel <- NULL
   fit <- NULL
+  G <- NULL
+  contaminated <- NULL
   for (i in 1:n.models){
     if (adjustedRandIndex(dataset,contaminatedModel$models[[i]]$group) > maxAdjRIndex){
       maxAdjRIndex <- adjustedRandIndex(dataset,contaminatedModel$models[[i]]$group)
       bestModel <- contaminatedModel$models[[i]]$model
       fit <- table(dataset,contaminatedModel$models[[i]]$group)
+      G <- contaminatedModel$models[[i]]$G
+      contaminated <-contaminatedModel$models[[i]]$contamination
+      bestI <- i
     }
   }
-  return(list(bestARI = maxAdjRIndex, comingModel = bestModel, fit = fit))
+  return(list(modelNum = bestI, 
+              comingModel = bestModel, 
+              G = G, 
+              isContaminated = contaminated, 
+              fit = fit, 
+              AdjustedRandIndex = maxAdjRIndex,
+              ))
 }
 whichBestModel(mixt.cn.wines, wines[,1])
-#table(wines[,1],mixt.cn.wines$models[[1]]$group)
-#adjustedRandIndex(wines[,1],mixt.cn.wines$models[[10]]$group)
 ```
