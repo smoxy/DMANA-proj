@@ -6,7 +6,7 @@ author: 'Matteo Fasulo, Simone Flavio Paris, Matteo Sivoccia'
 ```{r loadEnv, message=FALSE, warning=FALSE}
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
 loadPackages(c('sn','tidyverse','car','RColorBrewer','stargazer','mclust','ContaminatedMixt'))
-load("Z:/DesktopC/LUMSA/2/Data Mining/Finite Mixture/FiniteMixtureL31.RData")
+load("C:\\Users\\Matte\\Documents\\LUMSA\\Data Mining\\finite_mixture\\FiniteMixtureL31.RData")
 rm(CO2data)
 rm(NOdata)
 rm(tonedata)
@@ -138,7 +138,7 @@ hc.complete=hclust(x.dist,method="complete",members=NULL)
 hc.average=hclust(x.dist,method="average",members=NULL)
 hc.ward=hclust(x.dist,method="ward.D",members=NULL)
 k.means <- kmeans(wines[,-1],centers=3,nstart = 50)
-mixt.wines <- Mclust(wine[,-1],G=1:8)
+mixt.wines <- Mclust(wines[,-1],G=1:8)
 mixt.cn.wines <- CNmixt(wines[, -1], G = 1:4, initialization = "kmeans", seed = 1234, parallel = FALSE, verbose = F)
 plot(hc.single)
 plot(hc.complete)
@@ -160,6 +160,7 @@ table(wines[,1],k.means$cluster)
 adjustedRandIndex(wines[,1],k.means$cluster)
 table(wines[,1],mixt.wines$classification)
 adjustedRandIndex(wines[,1],mixt.wines$classification)
+
 whichBestModel <- function(contaminatedModel, dataset){
   n.models <- length(contaminatedModel$models)
   maxAdjRIndex <- -Inf
@@ -171,19 +172,38 @@ whichBestModel <- function(contaminatedModel, dataset){
     if (adjustedRandIndex(dataset,contaminatedModel$models[[i]]$group) > maxAdjRIndex){
       maxAdjRIndex <- adjustedRandIndex(dataset,contaminatedModel$models[[i]]$group)
       bestModel <- contaminatedModel$models[[i]]$model
+      result <- contaminatedModel$models[[i]]$group
       fit <- table(dataset,contaminatedModel$models[[i]]$group)
       G <- contaminatedModel$models[[i]]$G
       contaminated <-contaminatedModel$models[[i]]$contamination
       bestI <- i
     }
   }
-  return(list(modelNum = bestI, 
+  return(list(result = result,
+              modelNum = bestI, 
               comingModel = bestModel, 
               G = G, 
               isContaminated = contaminated, 
               fit = fit, 
-              AdjustedRandIndex = maxAdjRIndex,
-              ))
+              AdjustedRandIndex = maxAdjRIndex))
 }
 whichBestModel(mixt.cn.wines, wines[,1])
+```
+```{r summaryOfAllModel, message=FALSE, warning=FALSE}
+summaryOfModels <- function(df, models){
+  nModel <- length(models)
+  ari <- NULL
+  for(i in 1:nModel){
+    if (class(models[[i]])=='Mclust'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$classification)
+    } else if (class(models[[i]])=='ContaminatedMixt'){
+      ari[i] <- adjustedRandIndex(df,whichBestModel(models[[i]],df)$result)
+    }
+  }
+  outputDF <- data.frame('AdjustedRandIndex'=ari,
+                         stringsAsFactors = F)
+  return(outputDF)
+}
+test <- summaryOfModels(wines[,1],list(mixt.wines,mixt.cn.wines))
+test
 ```
