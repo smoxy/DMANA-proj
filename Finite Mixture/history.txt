@@ -1,0 +1,512 @@
+adjustedRandIndex(wines[,1],pippo$models[[1]]$group)
+pippo <- CNmixt(wines[, -1], G = 3, initialization = "random.post", seed = 5, parallel = FALSE, model = 'EEE')
+table(wines[,1],pippo$models[[1]]$group)
+table(wines[,1],pippo$models[[2]]$group)
+table(wines[,1],pippo$models[[1]]$group)
+adjustedRandIndex(wines[,1],pippo$models[[1]]$group)
+adjustedRandIndex(wines[,1],pippo$models[[2]]$group)
+pippo <- CNmixt(wines[, -1], G = 3, initialization = "random.clas", seed = 5, parallel = FALSE, model = 'EEE')
+table(wines[,1],pippo$models[[1]]$group)
+table(wines[,1],pippo$models[[2]]$group)
+adjustedRandIndex(wines[,1],pippo$models[[1]]$group)
+adjustedRandIndex(wines[,1],pippo$models[[2]]$group)
+pippo <- CNmixt(wines[, -1], G = 3, initialization = "random.clas", seed = 5, parallel = FALSE, model = 'EEE', verbose = F)
+View(mixt.cn.wines)
+mixt.cn.wines[["models"]][[51]][["detection"]]
+?pgmmEM
+??pgmmEM
+#
+y.data <- wine[,-1]
+#
+y.data <- wines[,-1]
+library(pgmm)
+wine.pgmm <- pgmmEM(y.data,rG=3,rq=2,icl=TRUE)
+plot(wine.pgmm)
+table(wine[,1],wine.pgmm$map)
+table(wines[,1],wine.pgmm$map)
+adjustedRandIndex(wines[,1],wine.pgmm$map)
+summary(wine.pgmm)
+print(wine.pgmm)
+km.perm <- KMeansSparseCluster.permute(y.data,K=3,wbounds=seq(3,7,len=15),nperms=5)
+??KMeansSparseCluster
+install.packages("sparcl")
+library(sparcl)
+km.perm <- KMeansSparseCluster.permute(y.data,K=3,wbounds=seq(3,7,len=15),nperms=5)
+km.out <- KMeansSparseCluster(y.data,K=3,wbounds=km.perm$bestw)
+table(wine[,1],km.out[[1]]$Cs)
+table(wines[,1],km.out[[1]]$Cs)
+adjustedRandIndex(wine[,1],km.out[[1]]$Cs)
+adjustedRandIndex(wines[,1],km.out[[1]]$Cs)
+?pgmm
+View(mixt.cn.wines)
+source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
+View(loadPackages)
+loadPackages(c('sn','tidyverse','car','RColorBrewer','stargazer','mclust','ContaminatedMixt'))
+load("Z:/DesktopC/LUMSA/2/Data Mining/Finite Mixture/FiniteMixtureL31.RData")
+rm(CO2data)
+rm(NOdata)
+rm(tonedata)
+View(wine)
+type <- wine$Type
+rm(wine)
+sn::data(wines)
+data(wines)
+View(wines)
+year <- as.numeric(substr(rownames(wines), 6, 7))
+table(wines$wine, year)
+wines %>%
+count(wine = factor(wine)) %>%
+mutate(pct = prop.table(n)) %>%
+ggplot(aes(x = wine, y = pct, fill = wine, label = scales::percent(pct))) +
+geom_col(position = 'dodge') +
+geom_text(position = position_dodge(width = .9),
+vjust = -0.5,
+size = 3) +
+scale_y_continuous(name = "Percentage")+
+scale_x_discrete(name = "Wine Name")+
+scale_fill_hue(l=40, c=35)+
+theme(legend.position = "none")
+wines[,'wine'] <- type # fix wine name in numeric
+View(wines)
+data(wines)
+View(wines)
+mixt.wines <- Mclust(wines[,-1],G=1:8)
+mixt.wines
+?Mclust
+install.packages("gclus")
+library(gclus)
+data("wine")
+View(wine)
+mixt.wines <- Mclust(wine[,-1],G=1:8)
+mixt.wines
+?Mclust
+mixt.wines$BIC
+mixt.wines <- Mclust(wine[,-1],G=1:8, modelNames='VEI')
+mixt.wines$BIC
+mixt.wines
+View(wine)
+?pggmEM
+?pgmmEM
+pippo<-pgmmEM(wine[,-1],rG=1:8,rq=1:5,icl=F)
+pippo<-pgmmEM(wine[,-1],rG=1:8,rq=1:5,icl=F,seed=1234)
+View(pippo)
+?pgmmEM
+pippo$model
+pippo$bic$CUU
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=1:8,rq=1:5,icl=F,seed=1234,modelSubset=c('CUU')
+)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,seed=1234,modelSubset=c('CUU')
+w
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,seed=1234,modelSubset=c('CUU'))
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,seed=1234,modelSubset=c('CUU'),zstart = 2)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,seed=1234,modelSubset=c('CUU'),zstart = 1)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 2)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1, loop = 50)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 2, loop = 50)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1, loop = 100)
+table(wine[,1], pippo$map)
+combDist <- function(distance, methods, data) {
+k <- 0
+results <- list()
+for (i in 1:length(distance)){
+ifelse(distance[i] == "mahalanobis",
+dist <- dissMatrix,
+dist <- dist(df, method = distance[i]))
+for (j in 1:length(methods)){
+k <- k + 1
+results[[k]] <- hclust(dist, method = methods[j])
+}
+return(results)
+}
+combDist <- function(distance, methods, data) {
+k <- 0
+results <- list()
+for (i in 1:length(distance)){
+ifelse(distance[i] == "mahalanobis",
+dist <- dissMatrix,
+dist <- dist(df, method = distance[i]))
+for (j in 1:length(methods)){
+k <- k + 1
+results[[k]] <- hclust(dist, method = methods[j])
+}
+return(results)
+}
+result <- combDist(c('mahalanobis', c("single", "complete", "average", "ward.D")), wine[,-1])
+??pairwise.mahalanobis
+library
+library(HDMD)
+dissMatrix <- as.dist(pairwise.mahalanobis(wine[,-1], grouping = c(1:nrow(wine)), cov = cov(wine[,-1]))$distance)
+result <- combDist(c('mahalanobis', c("single", "complete", "average", "ward.D")), wine[,-1])
+result <- combDist(c('mahalanobis'), c("single", "complete", "average", "ward.D"), wine[,-1])
+View(result)
+bestCluster <- function(data, cols, nclust){
+clustering <- matrix(NA, nrow = nrow(data), ncol = cols)
+for (j in 1:cols){
+clustering[, j] <- cutree(results[[j]], k = nclust)
+}
+return(clustering)
+}
+clustering <- bestCluster(wine[,-1], length(results), 8)
+clustering <- bestCluster(wine[,-1], length(result), 8)
+bestCluster <- function(data, cols, nclust){
+clustering <- matrix(NA, nrow = nrow(data), ncol = cols)
+for (j in 1:cols){
+clustering[, j] <- cutree(result[[j]], k = nclust)
+}
+return(clustering)
+}
+clustering <- bestCluster(wine[,-1], length(result), 8)
+View(clustering)
+typeof(clustering)
+bestCluster <- function(data, cols){
+for (j in 1:cols){
+clustering[[j]] <- cutree(result[[j]], k = cols)
+}
+return(clustering)
+}
+typeof(clustering)
+clustering <- bestCluster(wine[,-1], length(result))
+length(result)
+clustering <- bestCluster(wine[,-1], length(result))
+cutree(result[[1]], k = 4)
+cutree(result[[1]], k = 8)
+bestCluster <- function(data, cols){
+for (j in 1:cols){
+clustering[[j]] <- cutree(result[[j]], k = cols)
+}
+return(clustering)
+}
+bestCluster <- function(data, cols){
+clustering <- list()
+for (j in 1:cols){
+clustering[[j]] <- cutree(result[[j]], k = cols)
+}
+return(clustering)
+}
+clustering <- bestCluster(wine[,-1], length(result))
+View(clustering)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering[[1]])
+clustering <- bestCluster(wine[,-1], 8)
+View(combDist)
+plot(result[[4]])
+ward.mh <- result[[4]]
+View(ward.mh)
+bestCluster <- function(cols){
+clustering <- list()
+for (j in 1:cols){
+clustering[[j]] <- cutree(ward.mh, k = cols)
+}
+return(clustering)
+}
+clustering <- bestCluster(8)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering)
+View(clustering)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering)
+bestCluster <- function(cols){
+clustering <- list()
+for (j in 1:cols){
+clustering[[j]] <- cutree(ward.mh, k = cols)
+}
+return(clustering)
+}
+clustering <- bestCluster(8)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering)
+bestCluster <- function(cols){
+clustering <- list()
+for (j in 1:cols){
+clustering[[cols]] <- cutree(ward.mh, k = cols)
+}
+return(clustering)
+}
+clustering <- bestCluster(8)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering)
+View(clustering)
+bestCluster <- function(){
+clustering <- list()
+for (g in 1:8){
+clustering[[g]] <- cutree(ward.mh, k = g)
+}
+return(clustering)
+}
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering)
+clustering <- bestCluster(8)
+clustering <- bestCluster()
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering, relax = T)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering, relax = G)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering, relax = F)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering, relax = T)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=T,modelSubset=c('CUU'),zstart = 3, zlist = clustering)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering)
+pippo<-pgmmEM(wine[,-1],rG=1:8,rq1:5,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering)
+pippo<-pgmmEM(wine[,-1],rG=1:8,rq=1:5,icl=F,modelSubset=c('CUU'),zstart = 3, zlist = clustering)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=1:8,rq=1:5,icl=F,modelSubset=c('CUU'),zstart = 1,cccStart = T, loop = 100, seed = 1234)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1,cccStart = T, loop = 100, seed = 1234)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 2,cccStart = T, loop = 100, seed = 1234)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1,cccStart = T, loop = 100, seed = 1234)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=1:5,icl=F,modelSubset=c('CUU'),zstart = 1,cccStart = T, loop = 50, seed = 1234)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1,cccStart = T, loop = 50, seed = 1234, relax = T)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=5,icl=F,modelSubset=c('CUU'),zstart = 1,cccStart = T, loop = 50, seed = 1234, relax = T)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=9,icl=F,modelSubset=c('CUU'),zstart = 1,cccStart = T, loop = 50, seed = 1234, relax = T)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1,cccStart = T, loop = 50, seed = 1234, tol = 0.05)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1,cccStart = T, loop = 50, seed = 1234, tol = 0.005)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1, loop = 50, seed = 1234, tol = 0.05)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1, loop = 50, seed = 1234, tol = 0.005)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1, loop = 50, seed = 1234)
+table(wine[,1], pippo$map)
+pippo<-pgmmEM(wine[,-1],rG=4,rq=2,icl=F,modelSubset=c('CUU'),zstart = 1, loop = 50, seed = 1234)
+table(wine[,1], pippo$map)
+table(cbind(wines[,-1],year), pippo$map)
+table(year, pippo$map)
+cbind(wines[,-1],year)
+test<-cbind(wine,year)
+table(test, pippo$map)
+table(test[,1], pippo$map)
+table(test[,c(1,'year')], pippo$map)
+table(test[,c(1,14], pippo$map)
+table(test[,c(1,14)], pippo$map)
+table(test[,c(14)], pippo$map)
+table(test[,c(15)], pippo$map)
+table(pippo$map,wine[,1])
+table(pippo$map,year)
+table(pippo$map,test[,'year'])
+table(test[,'year'])
+table(wine[,1],test[,'year'])
+table(pippo$map,test[,'year'])
+library(tidyverse)
+test
+test %>%
+group_by(Class) %>%
+mutate(Y = unique(year))
+test %>%
+group_by(Class) %>%
+mutate(Y = unique(year))
+test %>%
+group_by(Class) %>%
+mutate(Y = year)
+test %>%
+group_by(Class) %>%
+mutate(Y = year)
+test %>%
+group_by(Class) %>%
+select(Class,year) %>%
+mutate(Y = as.factor(year))
+test %>%
+group_by(Class) %>%
+select(year) %>%
+mutate(Y = as.factor(year))
+test %>%
+group_by(Class) %>%
+mutate(Y = as.factor(year))
+test %>%
+group_by(Class) %>%
+mutate(Y = unique(as.factor(year)))
+test %>%
+group_by(Class) %>%
+mutate(Y = as.factor(year))
+test %>%
+group_by(Class) %>%
+mutate(Y = as.factor(year),
+classe = as.factor(Class))
+test %>%
+group_by(Class) %>%
+mutate(Y = as.factor(year),
+classe = as.factor(Class)) %>%
+group_by(classe)
+test %>%
+group_by(Class) %>%
+mutate(Y = as.factor(year),
+classe = as.factor(Class)) %>%
+group_by(classe) %>%
+View(.)
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = as.factor(year),
+classe = as.factor(Class)) %>%
+group_by(classe) %>%
+View(.)
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = as.factor(year),
+classe = as.factor(Class)) %>%
+group_by(classe)
+table(pippo$map,mario$classe)
+table(pippo$map,mario$Y)
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = as.factor(year),
+classe = as.character(Class)) %>%
+group_by(classe)
+table(pippo$map,mario$Y)
+View(mario)
+mutate(Y = paste(as.factor(year),'_',as.factor(Class))
+)
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = paste(as.factor(year),'_',as.factor(Class)))
+table(pippo$map,mario$Y)
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = paste(as.factor(year),'_',as.factor(Class))) %>%
+group_by(Class)
+table(pippo$map,mario$Y)
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = paste(as.factor(year),'_',as.factor(Class)))
+test %>%
+group_by(Class) %>%
+mutate(Y = as.factor(year))
+table(pippo$map,mario$Y)
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = paste(as.factor(year),'_',as.factor(Class)))
+table(pippo$map,mario$Y)
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = as.factor(year))
+table(pippo$map,mario$Y)
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = distinct(year))
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = distinct(.,ùyear))
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = distinct(.,year))
+mario <-test %>%
+select(Class,year)%>%
+mutate(Y = distinct(.,year))
+mario <-test %>%
+select(year) %>%
+mutate(Y = distinct(.,year))
+distinct(mario, mario$year)
+test <- distinct(mario, mario$year)
+table(pippo$map,test$`mario$year`)
+distinct(mario, mario$year)
+distinct(mario, mario$year, keep_all=T)
+distinct(mario, mario$year, keep_all=GF)
+distinct(mario, mario$year, keep_all=F)
+distinct(mario, mario$year)
+distinct(mario, mario$year, .keep_all)
+distinct(mario, mario$year, .keep_all=T)
+distinct(mario, mario$year, .keep_all=F)
+mario <-test %>%
+group_by(Class) %>%
+distinct(.,year))
+mario <-test %>%
+group_by(Class) %>%
+distinct(.,year)
+mario <-mario %>%
+group_by(Class) %>%
+distinct(.,year)
+mario <-mario %>%
+group_by(Class) %>%
+distinct(.,year)
+mario
+?table
+table(pippo$map,test$`mario$year`)
+table(pippo$map,test)
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = as.factor(year))
+test<-cbind(wine,year)
+table(pippo$map,test$year, stringsAsFactors=F)
+table(pippo$map, as.factor(test$year), stringsAsFactors=F)
+table(pippo$map, as.factor(test$year), stringsAsFactors=T)
+table(pippo$map, test$year, stringsAsFactors=T)
+pippo$map
+test$year
+table(pippo$map, test$year)
+table(pippo$map, test$year, stringsAsFactors=T)
+table(pippo$map, test$year, stringsAsFactors=F)
+table(pippo$map, test$year, stringsAsFactors=NULL)
+table(pippo$map, test$year)
+table(pippo$map, as.factor(test$year))
+table(pippo$map, as.data.frame(test$year,stringsAsFactors=T)
+)
+table(pippo$map, as.data.frame(test$year,stringsAsFactors=F))
+table(pippo$map, test$year)
+View(test)
+mario <- test %>%
+mutate(year = as.factor(year))
+table(pippo$map, mario$year)
+mario$year
+mario <- test %>%
+mutate(year = as.character.factor(year))
+mario <- test %>%
+mutate(year = as.character(year))
+mario$year
+table(pippo$map, mario$year)
+mario$year
+as.data.frame.matrix(mario$year)
+as.data.frame.matrix(table(pippo$map, mario$year))
+mario <-test %>%
++     group_by(Class) %>%
++     mutate(Y = paste(as.factor(Class),'_',as.factor(year)))
+test
+mario <-test %>%
+group_by(Class) %>%
+mutate(Y = paste(as.factor(Class),'_',as.factor(year)))
+table(pippo$map, mario$year)
+table(pippo$map, mario$Y)
+table(mario$Y, pippo$map)
+table(mario$Y, pippo$map, row.names(c('71','73','74','70','71','72','73','74','75','76','74','76','78','79')))
+table(mario$Y, pippo$map, row.names('71','73','74','70','71','72','73','74','75','76','74','76','78','79'))
+table(mario$Y, pippo$map, row.names(c('71','73','74','70','71','72','73','74','75','76','74','76','78','79')))
+table(mario$Y, pippo$map, row.names(c('71','73','74','70','c71','72','c73','c74','75','76','b74','76','78','79')))
+table(mario$Y, pippo$map, row.names(c('71','73','74','70','c71','72','c73','c74','75','76','b74','b76','78','79')))
+table(mario$Y, pippo$map, row.names(c('71','73','74','70','71','72','73','74','75','76','74','76','78','79')))
+table(mario$Y, pippo$map, row.names = c('71','73','74','70','71','72','73','74','75','76','74','76','78','79'))
+?factor
+factor(year)
+table(year)
+table(pippo$map, year)
+table(pippo$map, factor(year))
+factor(year)
+factor(year, levels = c('71','73','74','70','71','72','73','74','75','76','74','76','78','79'))
+factor(year, labels = c('71','73','74','70','71','72','73','74','75','76','74','76','78','79'))
+factor(year, levels = c('71','73','74','70','71','72','73','74','75','76','74','76','78','79'))
+factor(year, ordered = F)
+factor(year, ordered = T)
+factor(year, ordered = F)
+factor(year, levels = c('71','73','74','70','71','72','73','74','75','76','74','76','78','79'), ordered = F)
+factor(year, levels = c('71','73','74','70','71','72','73','74','75','76','74','76','78','79'), ordered = T)
+factor(year, levels = c('71','73','74','70','71','72','73','74','75','76','74','76','78','79'), ordered = F)
+factor(year, levels = c('71','73','74','70','71','72','73','74','75','76','74','76','78','79'))
+table(mario$Y, pippo$map)
+table(mario$Y, pippo$map, row.names(c('71','73','74','70','71','72','73','74','75','76','74','76','78','79')))
+table(mario$Y, pippo$map, row.names(c('71','73','74','70','A71','72','A73','A74','75','76','B74','76','78','79')))
+table(mario$Y, pippo$map)
+risultato <- table(mario$Y, pippo$map)
+rownames(risultato) <- c('71','73','74','70','A71','72','A73','A74','75','76','B74','76','78','79')
+risultato
+rownames(risultato) <- c('71','73','74','70','71','72','73','74','75','76','74','76','78','79')
+risultato
+t(risultato)
+table(mario$Y, pippo$map)
+table(wine[,1], pippo$map)
+risultato
+t(risultato)
