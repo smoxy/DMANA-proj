@@ -6,7 +6,7 @@ author: 'Matteo Fasulo, Simone Flavio Paris, Matteo Sivoccia'
 ```{r loadEnv, message=FALSE, warning=FALSE}
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
 loadPackages(c('sn','tidyverse','car','RColorBrewer','stargazer','mclust','ContaminatedMixt',
-               'plotly','ggplot2','ggdendro','pgmm','teigen','tclust','HDMD'))
+               'plotly','ggplot2','ggdendro','pgmm','teigen','tclust','HDMD','caTools','clustvarsel'))
 load("Z:\\DesktopC\\LUMSA\\2\\Data Mining\\Finite Mixture\\FiniteMixtureL31.RData")
 rm(CO2data)
 rm(NOdata)
@@ -132,106 +132,243 @@ calcBetweenGroupsVariance <- function(variable,groupvariable)
 calcBetweenGroupsVariance (wines[2],wines[1])
 ```
 
-```{r dldldl, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE}
-# DISTANCE
-x.euclidean   <- dist(scale(wines[,-1]), method="euclidean")
+```{r distance, echo=FALSE, message=FALSE, warning=FALSE}
 dissMatrix    <- as.dist(pairwise.mahalanobis(wines[,-1], grouping = c(1:nrow(wines)), cov = cov(wines[,-1]))$distance)
-eucl.hc.ward  <- hclust(x.euclidean,method="ward.D2")
-maha.hc.ward  <- hclust(dissMatrix,method="ward.D2")
+combDist <- function(distance, methods, df, dt, dissMatrix) {
+  c <- 0
+  results <- list()
+  for (i in 1:length(distance)){
+    ifelse(distance[i] == "minkowski",
+           dist = dist(df, method = distance[i], p = 3),
+           ifelse(distance[i] == "mahalanobis",
+                  dist = dissMatrix,
+                  dist = dist(df, method = distance[i])))
+    for (j in 1:length(methods)){
+      dendo = hclust(dist, method = methods[j])
+      for(elem in 2:4){
+        cluster = cutree(dendo, k=elem)
+        c <- c + 1
+        results[[c]] <- list(distance = distance[i],
+                             method = methods[j],
+                             groups = elem,
+                             table = table(dt,cluster),
+                             AdjustedRandIndex = adjustedRandIndex(dt,cluster),
+                             cluster = cluster)
+      }
+    }
+  }
+  return(results)
+}
+results <- combDist(c("euclidean", "manhattan", "minkowski","mahalanobis"),
+                    c("single", "complete", "average", "ward.D"), scale(wines[,-1]), wines[,1], dissMatrix)
 
-ggplotly(ggdendrogram(eucl.hc.ward, rotate = F, size = 2, leaf_labels = T, labels = F))
-hicluste3=cutree(eucl.hc.ward,k=3)
-table(wines[,1],hicluste3)
-hicluste1=cutree(eucl.hc.ward,k=4)
-table(wines[,1],hicluste1)
+optimal <- function(results){
+  best_randIndex = 0
+  best_model = integer()
+  for (i in 1:length(results)){
+    current_randIndex = results[[i]]$AdjustedRandIndex
+    if (current_randIndex > best_randIndex) {
+      best_randIndex = current_randIndex
+      best_model = i
+    }
+  }
+  print(list(best_randIndex=best_randIndex,
+             best_model=best_model))
+  return(results[[best_model]])
+}
+best_dist_model = optimal(results)
 
-ggplotly(ggdendrogram(maha.hc.ward, rotate = F, size = 2, leaf_labels = T, labels = F))
-hicluste4=cutree(maha.hc.ward,k=3)
-table(wines[,1],hicluste4)
-hicluste2=cutree(maha.hc.ward,k=4)
-table(wines[,1],hicluste2)
+ggplotly(ggdendrogram(best_dist_model, rotate = F, size = 2, leaf_labels = T, labels = F))
+```
 
+```{r splitTrainTest, message=FALSE, warning=FALSE}
+require(caTools)
+sample = sample.split(wines[,1], SplitRatio = .75)
+train = subset(wines, sample == TRUE)
+test  = subset(wines, sample == FALSE)
+```
+
+```{r partitioning, message=FALSE, warning=FALSE}
 k.means.3 <- kmeans(scale(wines[,-1]),centers=3,nstart = 50, iter.max = 100)
 k.means.4 <- kmeans(scale(wines[,-1]),centers=4,nstart = 50, iter.max = 100)
 
-mixt.wines <- Mclust(wines[,-1],G=3:8)                                  # EM Alg for Finite gaussian mixture models
-mixt.cn.wines.mixt.3 <- CNmixt(wines[,-1], G = 3, initialization = "mixt", seed = 1234, parallel = F, verbose = F)
-mixt.cn.wines.kmeans <- CNmixt(wines[,-1], G = 3, initialization = "kmeans", seed = 1234, parallel = F, verbose = F)
-mixt.cn.wines.rpost <- CNmixt(wines[,-1], G = 3, initialization = "random.post", seed = 1234, parallel = F, verbose = F)
-mixt.cn.wines.rclass <- CNmixt(wines[,-1], G = 3, initialization = "random.clas", seed = 1234, parallel = F, verbose = F)
-
-agree(mixt.cn.wines.mixt.3, givgroup = wines[,1])
-agree(mixt.cn.wines.kmeans, givgroup = wines[,1])
-agree(mixt.cn.wines.rpost, givgroup = wines[,1])
-agree(mixt.cn.wines.rclass, givgroup = wines[,1])
-plot(mixt.cn.wines.mixt.3, contours = TRUE)
-
-table(wines[,1],k.means$cluster)
-adjustedRandIndex(wines[,1],k.means$cluster)
-table(wines[,1],mixt.wines$classification)
-adjustedRandIndex(wines[,1],mixt.wines$classification)
-
-whichBestModel <- function(contaminatedModel, dataset){
-  n.models <- length(contaminatedModel$models)
-  maxAdjRIndex <- -Inf
-  bestModel <- NULL
-  fit <- NULL
-  G <- NULL
-  bic <- NULL
-  icl <- NULL
-  contaminated <- NULL
-  for (i in 1:n.models){
-    if (adjustedRandIndex(dataset,contaminatedModel$models[[i]]$group) > maxAdjRIndex){
-      maxAdjRIndex <- adjustedRandIndex(dataset,contaminatedModel$models[[i]]$group)
-      bestModel <- contaminatedModel$models[[i]]$model
-      result <- contaminatedModel$models[[i]]$group
-      fit <- table(dataset,contaminatedModel$models[[i]]$group)
-      G <- contaminatedModel$models[[i]]$G
-      contaminated <-contaminatedModel$models[[i]]$contamination
-      bestI <- i
-      bic <- contaminatedModel$models[[i]]$IC$BIC
-      icl <- contaminatedModel$models[[i]]$IC$ICL
-    }
-  }
-  return(list(result = result,
-              modelNum = bestI, 
-              comingModel = bestModel, 
-              G = G, 
-              isContaminated = contaminated, 
-              fit = fit, 
-              AdjustedRandIndex = maxAdjRIndex,
-              BIC = bic,
-              ICL = icl))
-}
-whichBestModel(mixt.cn.wines, wines[,1])
+PAM.3
+PAM.4
 ```
 
+```{r modelBased, message=FALSE, warning=FALSE}
+mixt.wines <- Mclust(wines[,-1],G=3:8)
+
+cn.wines.mixt <- CNmixt(wines[,-1], G = 3, initialization = "mixt", seed = 1234, parallel = F, verbose = F)
+cn.wines.kmeans <- CNmixt(wines[,-1], G = 3, initialization = "kmeans", seed = 1234, parallel = F, verbose = F)
+cn.wines.rpost <- CNmixt(wines[,-1], G = 3, initialization = "random.post", seed = 1234, parallel = F, verbose = F)
+cn.wines.rclass <- CNmixt(wines[,-1], G = 3, initialization = "random.clas", seed = 1234, parallel = F, verbose = F)
+
+
+teigen.kmeans <- teigen(wines[,-1], Gs=3:4, init = 'kmeans', scale = T)
+adjustedRandIndex(wines[,1],teigen.kmeans$classification)
+
+teigen.classifier.kmeans <- teigen(train[,-1], Gs=3:4, init = 'kmeans', scale = T, known = train[,1])
+predict(teigen.classifier.kmeans,test[,-1])
+adjustedRandIndex(test[,1],predict(teigen.classifier.kmeans, test[,-1])$classification)
+
+teigen.classifier.uniform <- teigen(train[,-1], Gs=3:4, init = 'uniform', scale = T, known = train[,1])
+predict(teigen.classifier.uniform,test[,-1])
+adjustedRandIndex(test[,1],predict(teigen.classifier.uniform, test[,-1])$classification)
+
+teigen.hard <- teigen(wines[,-1], Gs=3:4, init = 'hard', scale = T)
+adjustedRandIndex(wines[,1],teigen.hard$classification)
+teigen.soft <- teigen(wines[,-1], Gs=3:4, init = 'soft', scale = T)
+adjustedRandIndex(wines[,1],teigen.soft$classification)
+```
+
+```{r varSelection, message=FALSE, warning=FALSE}
+subset.headlong <- clustvarsel(wines[,-1],G=3:8, search = 'headlong', direction = 'forward', parallel = T)
+subset.greedy <- clustvarsel(wines[,-1],G=3:8, search = 'greedy', direction = 'forward', parallel = T)
+
+headlong.selected <- subset.headlong$model
+greedy.selected <- subset.greedy$model
+
+vscc.mclust <- vscc(wines[,-1], G=3:8, automate = "mclust", initial = NULL, train = NULL, forcereduction = FALSE)
+table(wines[,1], vscc.mclust$initialrun$classification) #Clustering results on full data set
+table(wines[,1], vscc.mclust$bestmodel$classification) #Clustering results on reduced data set
+
+km.perm <- KMeansSparseCluster.permute(wines[,-1],K=3,wbounds=seq(3,7,len=15),nperms=50,silent = T)
+print(km.perm)
+plot(km.perm)
+# run sparse k-means
+km.out <- KMeansSparseCluster(wines[,-1],K=3,wbounds=km.perm$bestw,nstart = 50, silent = T, maxiter=100)
+print(km.out)
+plot(km.out)
+table(km.out[[1]]$Cs,wines[,1])
+#
+lambda <- 10^seq(-3, 3, length = 100)
+rho <- seq(1, 2, length=2)
+lasso <- SelvarClustLasso(wines[,-1], nbcluster=3:4,criterion="ICL",lambda=lambda,rho=rho,nbcores = 2)
+summary(lasso)
+lasso$S
+lasso$R
+lasso$U
+lasso$nbcluster
+table(wines[,1],lasso$partition)
+
+# Build the model
+set.seed(123)
+ridge <- train(
+  wine ~., data = train, method = "glmnet",
+  trControl = trainControl("cv", number = 10),
+  tuneGrid = expand.grid(alpha = 0, lambda = lambda)
+  )
+# Model coefficients
+coef(ridge$finalModel, ridge$bestTune$lambda)
+# Make predictions
+predictions <- ridge %>% predict(test)
+# Model prediction performance
+data.frame(
+  RMSE = RMSE(predictions, test$wine),
+  Rsquare = R2(predictions, test$wine)
+)
+
+# Build the model
+set.seed(123)
+lasso <- train(
+  wine ~., data = train, method = "glmnet",
+  trControl = trainControl("cv", number = 10),
+  tuneGrid = expand.grid(alpha = 1, lambda = lambda)
+  )
+# Model coefficients
+coef(lasso$finalModel, lasso$bestTune$lambda)
+# Make predictions
+predictions <- lasso %>% predict(test)
+# Model prediction performance
+data.frame(
+  RMSE = RMSE(predictions, test$wine),
+  Rsquare = R2(predictions, test$wine)
+)
+
+set.seed(123)
+elastic <- train(
+  wine ~., data = train, method = "glmnet",
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 10
+  )
+# Model coefficients
+coef(elastic$finalModel, elastic$bestTune$lambda)
+# Make predictions
+predictions <- elastic %>% predict(test)
+# Model prediction performance
+data.frame(
+  RMSE = RMSE(predictions, test$wine),
+  Rsquare = R2(predictions, test$wine)
+)
+models <- list(ridge = ridge, lasso = lasso, elastic = elastic)
+resamples(models) %>% summary( metric = "RMSE")
+```
+
+```{r advanced, message=FALSE, warning=FALSE}
+# Il rilassamento dato da (p-q)^2 > p+q è verificato per  1 <= q <= 20
+pg.random.ccc <- pgmmEM(selectedWines[,-1], rG=3:8, rq=1:5, seed = 1234, relax = T)
+adjustedRandIndex(wines[,1],pg.random.ccc$map)
+
+pg.random <- pgmmEM(wines[,-1], rG=3:4, rq=20:25,icl=F,zstart = 1,cccStart = F,loop = 50, seed = 1234, relax = T)
+adjustedRandIndex(wines[,1],pg.random.ccc$map)
+
+pg2 <- pgmmEM(wines[,-1], rG=3:4, rq=20:25,icl=T,zstart = 1,cccStart = T,loop = 50, seed = 1234, relax = T)
+adjustedRandIndex(wines[,1],pg2$map)
+
+pg2 <- pgmmEM(wines[,-1], rG=3:4, rq=20:25,icl=T,zstart = 2, seed = 1234, relax = T)
+adjustedRandIndex(wines[,1],pg2$map)
+
+pg2 <- pgmmEM(wines[,-1], rG=3:4, rq=20:25,icl=T,zstart = 3, seed = 1234, relax = T, zlist=)
+adjustedRandIndex(wines[,1],pg2$map)
+
+
+
+
+agree(cn.wines.mixt, givgroup = wines[,1])
+agree(cn.wines.kmeans, givgroup = wines[,1])
+agree(cn.wines.rpost, givgroup = wines[,1])
+agree(cn.wines.rclass, givgroup = wines[,1])
+
+plot(cn.wines.mixt, contours = TRUE)
+plot(cn.wines.kmeans, contours = TRUE)
+plot(cn.wines.rpost, contours = TRUE)
+plot(cn.wines.rclass, contours = TRUE)
+```
+
+if (class(models[[i]])=='kmeans'){
+      ariTrain[i] <- adjustedRandIndex(train,models[[i]]$cluster)
+      ariTest[i] <- adjustedRandIndex(test,models[[i]]$cluster)
+      bic[i] <- NA
+      icl[i] <- NA
+      G[i] <- length(unique(models[[i]]$cluster))
+
+
 ```{r summaryOfAllModel, message=FALSE, warning=FALSE}
-summaryOfModels <- function(df, models){
-  require(mclust)
+summaryOfModels <- function(train, test, models){
   nModel <- length(models)
-  ari <- NULL
+  ariTrain <- NULL
+  ariTest <- NULL
   bic <- NULL
   icl <- NULL
   G <- NULL
   for(i in 1:nModel){
-           if (class(models[[i]])=='kmeans'){
-      ari[i] <- adjustedRandIndex(df,models[[i]]$cluster)
-      bic[i] <- NA
-      icl[i] <- NA
-      G[i] <- length(unique(models[[i]]$cluster))
-    } else if (class(models[[i]])=='Mclust'){
-      ari[i] <- adjustedRandIndex(df,models[[i]]$classification)
+           if (class(models[[i]])=='Mclust'){
+      ariTrain[i] <- adjustedRandIndex(train,models[[i]]$classification)
+      ariTest[i] <- adjustedRandIndex(test,predict(models[[i]],test)$classification)
       bic[i] <- models[[i]]$bic
       icl[i] <- models[[i]]$icl
       G[i] <- models[[i]]$G
     } else if (class(models[[i]])=='ContaminatedMixt'){
-      ari[i] <- adjustedRandIndex(df,whichBestModel(models[[i]],df)$result)
-      bic[i] <- whichBestModel(models[[i]],df)$BIC
-      icl[i] <- whichBestModel(models[[i]],df)$ICL
-      G[i] <- whichBestModel(models[[i]],df)$G
+      bestModel <- getBestModel(models[[i]])$models[[1]]
+      ariTrain[i] <- adjustedRandIndex(train,bestModel$group)
+      ariTest[i] <- adjustedRandIndex(test,predict(bestModel,))
+      bic[i] <- whichBestModel(models[[i]],train)$BIC
+      icl[i] <- whichBestModel(models[[i]],train)$ICL
+      G[i] <- whichBestModel(models[[i]],train)$G
     } else if (class(models[[i]])=='teigen'){
-      ari[i] <- adjustedRandIndex(df,models[[i]]$iclresults$classification)
+      ariTrain[i] <- adjustedRandIndex(train,models[[i]]$iclresults$classification)
+      ariTest[i] <- adjustedRandIndex(test,models[[i]]$iclresults$classification)
       bic[i] <- models[[i]]$bic
       icl[i] <- models[[i]]$iclresults$icl
       G[i] <- models[[i]]$G
