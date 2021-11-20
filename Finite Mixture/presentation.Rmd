@@ -1,13 +1,20 @@
 ---
 title: "Multivariate data analysis: a discriminating method of the origin of wines"
-output: html_notebook
+output: 
+  html_notebook:
+    toc: true
+    toc_depth: 2
 author: 'Matteo Fasulo, Simone Flavio Paris, Matteo Sivoccia'
+
 ---
 ```{r loadEnv, message=FALSE, warning=FALSE}
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
+
 loadPackages(c('sn','tidyverse','car','RColorBrewer','stargazer','mclust','ContaminatedMixt',
-               'plotly','ggplot2','ggdendro','pgmm','teigen','tclust','HDMD','caTools','clustvarsel'))
-load("Z:\\DesktopC\\LUMSA\\2\\Data Mining\\Finite Mixture\\FiniteMixtureL31.RData")
+               'plotly','ggplot2','ggdendro','pgmm','teigen','tclust','HDMD','caTools','clustvarsel',
+               'vscc','sparcl','SelvarMix','pgmm','tidyverse','caret','glmnet','MLmetrics'))
+
+load("C:\\Users\\Matte\\Documents\\LUMSA\\Data Mining\\finite_mixture\\FiniteMixtureL31.RData")
 rm(CO2data)
 rm(NOdata)
 rm(tonedata)
@@ -27,9 +34,10 @@ E' stato possibile attraverso la ricerca originaria risalire all'anno di osserva
 data(wines)
 year <- as.numeric(substr(rownames(wines), 6, 7))
 table(wines$wine, year)
+#wines[,'wine'] <- type
 ```
-
-Per quanto riguarda la numerosità delle singole classi:
+Notiamo subito che il Barbera è distribuito principalmente negli ultimi anni (76,78,79) mentre il Barolo nel 71, 73 e 74.
+Per quanto riguarda la percentuale delle singole classi:
 
 ```{r nClassi, message=FALSE, warning=FALSE}
 wines %>%
@@ -45,15 +53,16 @@ wines %>%
   scale_fill_hue(l=40, c=35)+
   theme(legend.position = "none")
 ```
+E' chiaro che il Grignolino sia il più numeroso (39.9%) seguito dal Barolo (33.1%)e dal Barbera (27.0%).
 
+Nella *matrix scatterplot*, le celle sulla diagonale mostrano gli istogrammi di ognuna delle variabili, in questo caso le concentrazioni delle prime 10 caratteristiche chimiche. Ognuna delle celle fuori dalla diagonale, rappresenta lo scatterplot di 2 delle 10 caratteristiche.
 
 ```{r scatterPlot, message=FALSE, warning=FALSE}
-wines[,'wine'] <- type # fix wine name in numeric
-scatterplotMatrix(wines[2:10])
-scatterplotMatrix(wines[11:20])
-scatterplotMatrix(wines[21:28])
+#scatterplotMatrix(wines[2:10])
+#scatterplotMatrix(wines[11:20])
+#scatterplotMatrix(wines[21:28])
 ```
-Nella *matrix scatterplot*, le celle sulla diagonale mostrano gli istogrammi di ognuna delle variabili, in questo caso le concentrazioni delle prime 10 caratteristiche chimiche. Ognuna delle celle fuori dalla diagonale, rappresenta lo scatterplot di 2 delle 10 caratteristiche.
+Per visualizzare le statistiche descrittive (media e deviazione standard) ci è sembrato opportuno dividerle in base alla classe di appartenenza:
 ```{r descriptive, message=FALSE, warning=FALSE}
 printMeanAndSdByGroup <- function(variables,groupvariable)
   {
@@ -70,15 +79,18 @@ printMeanAndSdByGroup <- function(variables,groupvariable)
 }
 printMeanAndSdByGroup(wines[2:28],wines[1])
 ```
+Alcune considerazioni :
+- La media di sugar, potassium, magnesium, phosphate, chloride, flavanoids, proanthocyanins, colour nel Barolo è più alta.
+- La media di acidity, tartaric, malic, uronic, alcal_ash nel Barbera è più alta.
+- La deviazione standard di acidity è più alta nel Grignolino. 
 
+Per tali motivi, abbiamo calcolato la varianza within tra una qualunque feature e i tipi di vino:
 ```{r withinVariance, message=FALSE, warning=FALSE}
 calcWithinGroupsVariance <- function(variable,groupvariable)
   {
-     # find out how many values the group variable can take
      groupvariable2 <- as.factor(groupvariable[[1]])
      levels <- levels(groupvariable2)
      numlevels <- length(levels)
-     # get the mean and standard deviation for each group:
      numtotal <- 0
      denomtotal <- 0
      for (i in 1:numlevels)
@@ -86,19 +98,18 @@ calcWithinGroupsVariance <- function(variable,groupvariable)
         leveli <- levels[i]
         levelidata <- variable[groupvariable==leveli,]
         levelilength <- length(levelidata)
-        # get the standard deviation for group i:
         sdi <- sd(levelidata)
         numi <- (levelilength - 1)*(sdi * sdi)
         denomi <- levelilength
         numtotal <- numtotal + numi
         denomtotal <- denomtotal + denomi
      }
-     # calculate the within-groups variance
      Vw <- numtotal / (denomtotal - numlevels)
      return(Vw)
 }
 calcWithinGroupsVariance(wines[2],wines[1])
 ```
+Stesso discorso per la varianza between tra una feature e i vini: 
 ```{r betweenVariance}
 calcBetweenGroupsVariance <- function(variable,groupvariable)
   {
@@ -183,17 +194,30 @@ ggplotly(ggdendrogram(best_dist_model, rotate = F, size = 2, leaf_labels = T, la
 
 ```{r splitTrainTest, message=FALSE, warning=FALSE}
 require(caTools)
-sample = sample.split(wines[,1], SplitRatio = .75)
+sample = sample.split(wines[,1], SplitRatio = .50)
+
 train = subset(wines, sample == TRUE)
+trainTestNames <- train$wine
+#train$wine <- as.numeric(train$wine)
+
 test  = subset(wines, sample == FALSE)
+wineTestNames <- test$wine
+#test$wine <- as.numeric(test$wine)
 ```
 
 ```{r partitioning, message=FALSE, warning=FALSE}
+require(cluster)
 k.means.3 <- kmeans(scale(wines[,-1]),centers=3,nstart = 50, iter.max = 100)
 k.means.4 <- kmeans(scale(wines[,-1]),centers=4,nstart = 50, iter.max = 100)
 
-PAM.3
-PAM.4
+PAM.3 <- pam(wines[,-1], k=3,
+    metric = "euclidean", 
+    nstart = 50,
+    stand = TRUE)
+PAM.4 <- pam(wines[,-1], k=4,
+    metric = "euclidean", 
+    nstart = 50,
+    stand = TRUE)
 ```
 
 ```{r modelBased, message=FALSE, warning=FALSE}
@@ -223,55 +247,85 @@ adjustedRandIndex(wines[,1],teigen.soft$classification)
 ```
 
 ```{r varSelection, message=FALSE, warning=FALSE}
-subset.headlong <- clustvarsel(wines[,-1],G=3:8, search = 'headlong', direction = 'forward', parallel = T)
-subset.greedy <- clustvarsel(wines[,-1],G=3:8, search = 'greedy', direction = 'forward', parallel = T)
+subset.headlong <- clustvarsel(wines[,-1],G=3:4, search = 'headlong', direction = 'forward', parallel = T)
+subset.greedy <- clustvarsel(wines[,-1],G=3:4, search = 'greedy', direction = 'forward', parallel = T)
 
 headlong.selected <- subset.headlong$model
+table(wines[,1],headlong.selected$classification)
 greedy.selected <- subset.greedy$model
+table(wines[,1],greedy.selected$classification)
 
-vscc.mclust <- vscc(wines[,-1], G=3:8, automate = "mclust", initial = NULL, train = NULL, forcereduction = FALSE)
+vscc.mclust <- vscc(wines[,-1], G=3:4, automate = "mclust", initial = NULL, train = NULL, forcereduction = FALSE)
 table(wines[,1], vscc.mclust$initialrun$classification) #Clustering results on full data set
 table(wines[,1], vscc.mclust$bestmodel$classification) #Clustering results on reduced data set
 
-km.perm <- KMeansSparseCluster.permute(wines[,-1],K=3,wbounds=seq(3,7,len=15),nperms=50,silent = T)
-print(km.perm)
-plot(km.perm)
+km.perm.3 <- KMeansSparseCluster.permute(wines[,-1],K=3,wbounds=seq(3,7,len=15),nperms=50,silent = T)
+km.perm.4 <- KMeansSparseCluster.permute(wines[,-1],K=4,wbounds=seq(3,7,len=15),nperms=50,silent = T)
 # run sparse k-means
-km.out <- KMeansSparseCluster(wines[,-1],K=3,wbounds=km.perm$bestw,nstart = 50, silent = T, maxiter=100)
-print(km.out)
-plot(km.out)
-table(km.out[[1]]$Cs,wines[,1])
+km.sparse.3 <- KMeansSparseCluster(wines[,-1],K=3,wbounds=km.perm.3$bestw,nstart = 50, silent = T, maxiter=100)
+table(wines[,1],km.sparse.3[[1]]$Cs)
+km.sparse.4 <- KMeansSparseCluster(wines[,-1],K=4,wbounds=km.perm.4$bestw,nstart = 50, silent = T, maxiter=100)
+table(wines[,1],km.sparse.4[[1]]$Cs)
 #
-lambda <- 10^seq(-3, 3, length = 100)
 rho <- seq(1, 2, length=2)
-lasso <- SelvarClustLasso(wines[,-1], nbcluster=3:4,criterion="ICL",lambda=lambda,rho=rho,nbcores = 2)
+lasso <- SelvarClustLasso(wines[,-1], nbcluster=3:4,criterion="ICL",lambda=lambda,rho=rho,nbcores = 6)
 summary(lasso)
 lasso$S
 lasso$R
 lasso$U
 lasso$nbcluster
 table(wines[,1],lasso$partition)
+```
+## Tecniche di regolarizzazione
+Per la nostra analisi abbiamo voluto verificare l'efficienza di tre noti modelli di regolarizzazione attraverso il pacchetto *caret*:
 
+- Ridge
+- Lasso
+- Elastic Net
+
+```{r lambdaTuning, message=FALSE, warning=FALSE}
+lambda <- 10^seq(.001, .1, by = .001)
+```
+
+### Ridge
+Il modello *Ridge* riduce i coefficienti, in modo che le variabili, con un contributo minore al risultato, abbiano i loro coefficienti vicini allo zero. Invece di forzarli a essere esattamente zero (come nel *Lasso*), li penalizziamo con un termine chiamato *norma L2* costringendoli così a essere piccoli. In questo modo diminuiamo la complessità del modello senza eliminare nessuna variabile attraverso una costante chiamata lambda ($\lambda$) di penalizzazione:
+$$
+L_{ridge}(\hat{\beta}) = \sum_{i = 1}^{n}{(y_i - x_i\hat{\beta})^2} + \lambda\sum_{k = 1}^{K}{\hat{\beta}_k^2}
+$$
+
+```{r caretRidge, message=FALSE, warning=FALSE}
 # Build the model
 set.seed(123)
-ridge <- train(
-  wine ~., data = train, method = "glmnet",
-  trControl = trainControl("cv", number = 10),
-  tuneGrid = expand.grid(alpha = 0, lambda = lambda)
-  )
+ridge <- caret::train(
+  x = train[,-1],
+  y = factor(train[,1]),
+  method = "glmnet",
+  trControl = trainControl("cv", number = 10, classProbs = TRUE, summaryFunction = multiClassSummary),
+  tuneGrid = expand.grid(alpha = 0),
+  metric="ROC")
 # Model coefficients
 coef(ridge$finalModel, ridge$bestTune$lambda)
 # Make predictions
 predictions <- ridge %>% predict(test)
 # Model prediction performance
-data.frame(
-  RMSE = RMSE(predictions, test$wine),
-  Rsquare = R2(predictions, test$wine)
-)
+tibble(
+  trueValue = wineTestNames,
+  predictedValue = predictions)
+```
+```{r ridgeResult}
+caret::confusionMatrix(predictions, test$wine)
+```
+Il ridge è composto dalla somma dei residui quadrati più una penalità, definita dalla lettera Lambda, che è moltiplicata per la somma dei coefficienti quadrati $\beta$. Quando $\lambda = 0$, il termine di penalità non ha alcun effetto e il ridge produrrà i coefficienti minimi quadrati classici. Tuttavia, quando $\lambda$ aumenta all’infinito, l’impatto della penalità aumenta e i coefficienti si avvicinano allo zero. Il ridge è particolarmente indicato quando si hanno molti dati multivariati con numero di feature maggiore del numero di osservazioni. Lo svantaggio, però, è che includerà tutti le feature nel modello finale, a differenza dei metodi di feature selection, che generalmente selezioneranno un insieme ridotto di variabili tra quelle disponibili.
 
+### Lasso
+Il *Least Absolute Shrinkage and Selection Operator* (LASSO) riduce i coefficienti verso lo zero penalizzando il modello con un termine di penalità chiamato *norma L1*, che è la somma dei coefficienti in valore assoluto:
+$$
+L_{lasso}(\hat{\beta}) = \sum_{i = 1}^{n}{(y_i - x_i\hat{\beta})^2} + \lambda\sum_{k = 1}^{K}{|\hat{\beta}_k|}
+$$
+```{r caretLasso, message=FALSE, warning=FALSE}
 # Build the model
 set.seed(123)
-lasso <- train(
+lasso <- caret::train(
   wine ~., data = train, method = "glmnet",
   trControl = trainControl("cv", number = 10),
   tuneGrid = expand.grid(alpha = 1, lambda = lambda)
@@ -285,9 +339,21 @@ data.frame(
   RMSE = RMSE(predictions, test$wine),
   Rsquare = R2(predictions, test$wine)
 )
+```
+In questo caso la penalità ha l’effetto di forzare alcune delle stime dei coefficienti, con un contributo minore al modello, a essere esattamente uguale a zero. Il lasso, quindi, può anche essere visto come un’alternativa ai metodi di feature selection per eseguire la selezione delle variabili al fine di ridurre la complessità del modello.
 
+Come nel ridge, è fondamentale selezionare un buon valore di $\lambda$.
+
+Quando lambda è piccolo, il risultato è molto vicino alla stima dei minimi quadrati. All’aumentare di lambda, si verifica una contrazione in modo da poter eliminare le variabili che sono a zero.
+
+### Elastic Net
+Elastic Net combina le proprietà di Ridge e Lasso penalizzando il modello usando sia la norma L2 che la norma L1:
+$$
+L_{E    lasticNet}(\hat{\beta}) = \frac{\sum_{i = 1}^{n}{(y_i - x_i\hat{\beta})^2}}{2n} + \lambda(\frac{1-\alpha}{2}\sum_{k = 1}^{K}{\hat{\beta}_k^2} + \alpha\sum_{k = 1}^{K}{|\hat{\beta}_k}|)
+$$
+```{r caretElastic, message=FALSE, warning=FALSE}
 set.seed(123)
-elastic <- train(
+elastic <- caret::train(
   wine ~., data = train, method = "glmnet",
   trControl = trainControl("cv", number = 10),
   tuneLength = 10
@@ -302,12 +368,15 @@ data.frame(
   Rsquare = R2(predictions, test$wine)
 )
 models <- list(ridge = ridge, lasso = lasso, elastic = elastic)
-resamples(models) %>% summary( metric = "RMSE")
+resamples(models) %>% summary(metric = "RMSE")
 ```
+Oltre a impostare e scegliere un valore lambda, l’*elastic net* ci consente anche di ottimizzare il parametro alfa dove $\alpha = 0$ corrisponde a *ridge* e $\alpha = 1$ al *lasso*.
+
+Pertanto possiamo scegliere un valore $\alpha$ compreso tra 0 e 1 per ottimizzare l’elastic net. Se tale valore è incluso in questo intervallo, si avrà una riduzione con alcuni portati a $0$.
 
 ```{r advanced, message=FALSE, warning=FALSE}
 # Il rilassamento dato da (p-q)^2 > p+q è verificato per  1 <= q <= 20
-pg.random.ccc <- pgmmEM(selectedWines[,-1], rG=3:8, rq=1:5, seed = 1234, relax = T)
+pg.random.ccc <- pgmmEM(selectedWines[,-1], rG=3:4, rq=1:5, seed = 1234, relax = T)
 adjustedRandIndex(wines[,1],pg.random.ccc$map)
 
 pg.random <- pgmmEM(wines[,-1], rG=3:4, rq=20:25,icl=F,zstart = 1,cccStart = F,loop = 50, seed = 1234, relax = T)
@@ -344,7 +413,7 @@ if (class(models[[i]])=='kmeans'){
       G[i] <- length(unique(models[[i]]$cluster))
 
 
-```{r summaryOfAllModel, message=FALSE, warning=FALSE}
+```{r summaryOfAllModels, message=FALSE, warning=FALSE}
 summaryOfModels <- function(train, test, models){
   nModel <- length(models)
   ariTrain <- NULL
