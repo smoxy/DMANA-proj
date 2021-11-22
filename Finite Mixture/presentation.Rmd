@@ -7,13 +7,17 @@ output:
     toc: yes
     toc_depth: 3
     number_sections: true
+    toc_float: true
+    theme: united
+    highlight: tango
+    df_print: paged
 ---
 ```{r loadEnv, message=FALSE, warning=FALSE}
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
 
-loadPackages(c('sn','tidyverse','car','RColorBrewer','stargazer','mclust','ContaminatedMixt',
+loadPackages(c('sn','tidyverse','psych','RColorBrewer','stargazer','mclust','ContaminatedMixt',
                'plotly','ggplot2','ggdendro','teigen','tclust','HDMD','caTools','clustvarsel',
-               'vscc','sparcl','SelvarMix','pgmm','caret','glmnet','MLmetrics'))
+               'vscc','sparcl','pgmm','caret','glmnet','MLmetrics','DT'))
 
 load("Z:\\DesktopC\\LUMSA\\2\\Data Mining\\Finite Mixture\\FiniteMixtureL31.RData")
 rm(CO2data)
@@ -30,11 +34,15 @@ dal Piemonte. Un set di dati con 178 osservazioni e 28 variabili (di cui la prim
 - Grignolino
 - Barbera
 
+```{r dtTable}
+data(wines)
+wines
+```
+
 ## Annata del vino: un fattore da considerare?
 E' stato possibile attraverso la ricerca originaria risalire all'anno di osservazione di ciascun vino. Di seguito vengono riportate le osservazioni dei tre diversi tipi di vino durante gli anni:
 
 ```{r vinoAnni, message=FALSE, warning=FALSE}
-data(wines)
 year <- as.numeric(substr(rownames(wines), 6, 7))
 table(wines$wine, year)
 #wines[,'wine'] <- type
@@ -58,11 +66,29 @@ wines %>%
 ```
 E' chiaro che il Grignolino sia il più numeroso (39.9%) seguito dal Barolo (33.1%) e dal Barbera (27.0%).
 
-Nella *matrix scatterplot*, le celle sulla diagonale mostrano gli istogrammi di ognuna delle variabili, in questo caso le concentrazioni delle prime 10 caratteristiche chimiche. Ognuna delle celle fuori dalla diagonale, rappresenta lo scatterplot di 2 delle 10 caratteristiche.
+Per rappresentare la dispersione dei dati abbiamo usato uno scatterplot leggermente differente dal solito. Sulla diagonale superiore si vede la distribuzione dei dati mentre sulla diagonale inferiore vi è la _correlazione di Pearson_ tra le variabili.
 
 ```{r scatterPlot, message=FALSE, warning=FALSE}
-scatterplotMatrix(wines[2:28])
+# Correlation panel
+my_cols <- c("#00AFBB", "#E7B800", "#FC4E07") 
+panel.cor <- function(x, y){
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- round(cor(x, y), digits=2)
+    txt <- paste0("R = ", r)
+    text(0.5, 0.5, txt, cex = 1)
+}
+# Customize upper panel
+upper.panel<-function(x, y){
+  points(x,y, pch = 19, col = my_cols[wines$wine],cex=.5)
+}
+# Create the plots
+pairs(wines[,2:8], 
+      lower.panel = panel.cor,
+      upper.panel = upper.panel)
 ```
+Dalle prime 7 variabili, è possibile notare una correlazione di 0.69 tra *acidity* e *malic* e ovviamente una relazione inversamente proporzionale tra *pH* e *acidity*.
+
 # Statistiche descrittive
 Per visualizzare le statistiche descrittive (media e deviazione standard) ci è sembrato opportuno dividerle in base alla classe di appartenenza:
 ```{r descriptive, message=FALSE, warning=FALSE}
@@ -88,7 +114,7 @@ Alcune considerazioni:
 - La deviazione standard di acidity è più alta nel Grignolino. 
 
 ## Varianza Within
-Per tali motivi, abbiamo calcolato la varianza within tra una qualunque feature e i tipi di vino:
+Abbiamo calcolato la varianza within tra una feature e i tipi di vino:
 ```{r withinVariance, message=FALSE, warning=FALSE}
 calcWithinGroupsVariance <- function(variable,groupvariable)
   {
@@ -111,20 +137,17 @@ calcWithinGroupsVariance <- function(variable,groupvariable)
      Vw <- numtotal / (denomtotal - numlevels)
      return(Vw)
 }
-calcWithinGroupsVariance(wines[2],wines[1])
+calcWithinGroupsVariance(wines["flavanoids"],wines[1])
 ```
 ## Varianza Between
 Stesso discorso per la varianza between tra una feature e i vini: 
-```{r betweenVariance}
+```{r betweenVariance, message=FALSE, warning=FALSE}
 calcBetweenGroupsVariance <- function(variable,groupvariable)
   {
-     # find out how many values the group variable can take
      groupvariable2 <- as.factor(groupvariable[[1]])
      levels <- levels(groupvariable2)
      numlevels <- length(levels)
-     # calculate the overall grand mean:
      grandmean <- sapply(variable,mean)
-     # get the mean and standard deviation for each group:
      numtotal <- 0
      denomtotal <- 0
      for (i in 1:numlevels)
@@ -132,7 +155,6 @@ calcBetweenGroupsVariance <- function(variable,groupvariable)
         leveli <- levels[i]
         levelidata <- variable[groupvariable==leveli,]
         levelilength <- length(levelidata)
-        # get the mean and standard deviation for group i:
         meani <- mean(levelidata)
         sdi <- sd(levelidata)
         numi <- levelilength * ((meani - grandmean)^2)
@@ -140,42 +162,94 @@ calcBetweenGroupsVariance <- function(variable,groupvariable)
         numtotal <- numtotal + numi
         denomtotal <- denomtotal + denomi
      }
-     # calculate the between-groups variance
      Vb <- numtotal / (numlevels - 1)
      Vb <- Vb[[1]]
      return(Vb)
 }
-calcBetweenGroupsVariance (wines[2],wines[1])
+calcBetweenGroupsVariance(wines["flavanoids"],wines[1])
+```
+## Separazione
+Per vedere quali variabili hanno la maggiore separazione, (rapporto tra Varianza Between e Varianza Within) abbiamo scritto una funzione apposita per calcolarne il valore per ogni feature.
+```{r separation, message=FALSE, warning=FALSE}
+calcSeparations <- function(variables,groupvariable)
+  {
+     # find out how many variables we have
+     variables <- as.data.frame(variables)
+     numvariables <- length(variables)
+     # find the variable names
+     variablenames <- colnames(variables)
+     # calculate the separation for each variable
+     Vw <- NULL
+     Vb <- NULL
+     sep <- NULL
+     for (i in 1:numvariables)
+     {
+        variablei <- variables[i]
+        variablename <- variablenames[i]
+        Vw[i] <- calcWithinGroupsVariance(variablei, groupvariable)
+        Vb[i] <- calcBetweenGroupsVariance(variablei, groupvariable)
+        sep[i] <- Vb[i]/Vw[i]
+     }
+     result <- data.frame('Within'=Vw,'Between'=Vb,'Sep'=sep, row.names = as.vector(colnames(wines[,-1])), stringsAsFactors = F)
+     result[order(result$Sep,decreasing = T),]
+}
+calcSeparations(wines[2:28],wines[1])
 ```
 # Splitting in Train e Test
+Per alcune analisi successive, abbiamo provato a cambiare il task della ricerca tentando di utilizzare un modello come classificatore e di misurarne le prestazioni di classificazione. A tale scopo, abbiamo suddiviso il dataset originario in due sottogruppi: 
+
+- train
+- test
 ```{r splitTrainTest, message=FALSE, warning=FALSE}
 require(caTools)
 sample = sample.split(wines[,1], SplitRatio = .50)
 
 train = subset(wines, sample == TRUE)
 trainTestNames <- train$wine
+print(paste("Train Obs:",nrow(train)))
 #train$wine <- as.numeric(train$wine)
 
 test  = subset(wines, sample == FALSE)
 wineTestNames <- test$wine
+print(paste("Test Obs:",nrow(test)))
 #test$wine <- as.numeric(test$wine)
 ```
 # Clustering
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+Per il Clustering abbiamo deciso di applicare: 
+
+- Un approccio **Distance-Based**:
+  - Gerarchico:
+    - Euclidean, Minkowski, Manhattan, Mahalanobis
+  - Di partizionamento:
+    - KMeans
+    - PAM
+- Un approccio **Model-Based**:
+  - Gaussian Mixture (Mclust)
+  - Contaminated Normal (CNmixt)
+  - Multivariate t Distribution (teigen)
+  - Parsimonious Gaussian Mixture Models (pgmm)
+
+
 ## Distance-Based
-```{r distance, echo=FALSE, message=FALSE, warning=FALSE}
-dissMatrix    <- as.dist(pairwise.mahalanobis(wines[,-1], grouping = c(1:nrow(wines)), cov = cov(wines[,-1]))$distance)
+```{r distance, message=FALSE, warning=FALSE}
+dissMatrix    <- pairwise.mahalanobis(wines[,-1],
+                                      grouping = c(1:nrow(wines)),
+                                      cov = cov(wines[,-1]))$distance
+dissMatrix <- sqrt(dissMatrix)
+dissMatrix <- as.dist(dissMatrix)
 combDist <- function(distance, methods, df, dt, dissMatrix) {
   c <- 0
   results <- list()
   for (i in 1:length(distance)){
     ifelse(distance[i] == "minkowski",
-           dist = dist(df, method = distance[i], p = 3),
+           dist <- dist(df, method = distance[i], p = 4),
            ifelse(distance[i] == "mahalanobis",
-                  dist = dissMatrix,
-                  dist = dist(df, method = distance[i])))
+                  dist <- dissMatrix,
+                  dist <- dist(df, method = distance[i])))
     for (j in 1:length(methods)){
       dendo = hclust(dist, method = methods[j])
+      dendo.x = ggdendrogram(dendo, rotate = F, size = 2, leaf_labels = T, labels = F) + 
+                               ggtitle(paste(distance[i],' ',methods[j],sep=''))
       for(elem in 2:4){
         cluster = cutree(dendo, k=elem)
         c <- c + 1
@@ -183,6 +257,7 @@ combDist <- function(distance, methods, df, dt, dissMatrix) {
                              method = methods[j],
                              groups = elem,
                              table = table(dt,cluster),
+                             dendo = dendo.x,
                              AdjustedRandIndex = adjustedRandIndex(dt,cluster),
                              cluster = cluster)
       }
@@ -194,38 +269,174 @@ results <- combDist(c("euclidean", "manhattan", "minkowski","mahalanobis"),
                     c("single", "complete", "average", "ward.D"), scale(wines[,-1]), wines[,1], dissMatrix)
 
 optimal <- function(results){
-  best_randIndex = 0
-  best_model = integer()
+  best_randIndex.eu = 0
+  best_randIndex.ma = 0
+  best_randIndex.mi = 0
+  best_randIndex.maha = 0
+  best_model.eu = integer()
+  best_model.ma = integer()
+  best_model.mi = integer()
+  best_model.maha = integer()
   for (i in 1:length(results)){
     current_randIndex = results[[i]]$AdjustedRandIndex
-    if (current_randIndex > best_randIndex) {
-      best_randIndex = current_randIndex
-      best_model = i
+    if (results[[i]]$distance == "euclidean"){
+      if (current_randIndex > best_randIndex.eu) {
+        best_randIndex.eu = current_randIndex
+        best_model.eu = i
+      }
+    }
+    else if (results[[i]]$distance == "manhattan"){
+      if (current_randIndex > best_randIndex.ma) {
+        best_randIndex.ma = current_randIndex
+        best_model.ma = i
+      }
+    }
+    else if (results[[i]]$distance == "minkowski"){
+      if (current_randIndex > best_randIndex.mi) {
+        best_randIndex.mi = current_randIndex
+        best_model.mi = i
+      }
+    }
+    else if (results[[i]]$distance == "mahalanobis"){
+      if (current_randIndex > best_randIndex.maha) {
+        best_randIndex.maha = current_randIndex
+        best_model.maha = i
+      }
     }
   }
-  print(list(best_randIndex=best_randIndex,
-             best_model=best_model))
-  return(results[[best_model]])
+  #print(list(euclidean = list(model.number = best_model.eu,
+  #                            cluster = results[[best_model.eu]]$groups,
+  #                            AdjustedRandIndex = best_randIndex.eu),
+  #           manhattan = list(model.number = best_model.ma,
+  #                            cluster = results[[best_model.ma]]$groups,
+  #                            AdjustedRandIndex = best_randIndex.ma),
+  #           minkowski = list(model.number = best_model.mi,
+  #                            cluster = results[[best_model.mi]]$groups,
+  #                            AdjustedRandIndex = best_randIndex.mi),
+  #           mahalanobis=list(model.number = best_model.maha,
+  #                            cluster = results[[best_model.maha]]$groups,
+  #                            AdjustedRandIndex = best_randIndex.maha))
+  #    )
+  return(list(euclidean = results[[best_model.eu]],
+              manhattan = results[[best_model.ma]],
+              minkowski = results[[best_model.mi]],
+              mahalanobis=results[[best_model.maha]]))
 }
 best_dist_model = optimal(results)
-
-ggplotly(ggdendrogram(best_dist_model, rotate = F, size = 2, leaf_labels = T, labels = F))
 ```
-### K-Means e PAM
-```{r partitioning, message=FALSE, warning=FALSE}
+### Dendrogrammi {.tabset}
+
+#### Euclidean
+```{r euclidean, message=FALSE, warning=FALSE}
+ggplotly(best_dist_model$euclidean$dendo)
+print(best_dist_model$euclidean$table)
+print(paste("AdjustedRandIndex:",round(best_dist_model$euclidean$AdjustedRandIndex,3)))
+```
+#### Manhattan
+```{r manhattan, message=FALSE, warning=FALSE}
+ggplotly(best_dist_model$manhattan$dendo)
+print(best_dist_model$manhattan$table)
+print(paste("AdjustedRandIndex:",round(best_dist_model$manhattan$AdjustedRandIndex,3)))
+```
+#### Minkowski
+```{r minkowski, message=FALSE, warning=FALSE}
+ggplotly(best_dist_model$minkowski$dendo)
+print(best_dist_model$minkowski$table)
+print(paste("AdjustedRandIndex:",round(best_dist_model$minkowski$AdjustedRandIndex,3)))
+```
+#### Mahalanobis
+```{r mahalanobis, message=FALSE, warning=FALSE}
+ggplotly(best_dist_model$mahalanobis$dendo)
+print(best_dist_model$mahalanobis$table)
+print(paste("AdjustedRandIndex:",round(best_dist_model$mahalanobis$AdjustedRandIndex,3)))
+```
+
+### K-Means e PAM {.tabset}
+#### KMeans 3
+```{r kmeans3, message=FALSE, warning=FALSE}
 require(cluster)
 k.means.3 <- kmeans(scale(wines[,-1]),centers=3,nstart = 50, iter.max = 100)
+table(wines[,1], k.means.3$cluster)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(k.means.3$cluster, wines[,1]),3)))
+```
+#### KMeans 4
+```{r kmeans4, message=FALSE, warning=FALSE}
+require(cluster)
 k.means.4 <- kmeans(scale(wines[,-1]),centers=4,nstart = 50, iter.max = 100)
-
+table(wines[,1], k.means.4$cluster)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(k.means.4$cluster, wines[,1]),3)))
+```
+#### PAM 3
+```{r pam3, message=FALSE, warning=FALSE}
+require(cluster)
 PAM.3 <- pam(wines[,-1], k=3,
     metric = "euclidean", 
     nstart = 50,
     stand = TRUE)
+table(wines[,1], PAM.3$clustering)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(PAM.3$clustering, wines[,1]),3)))
+```
+#### PAM 4
+```{r pam4, message=FALSE, warning=FALSE}
+require(cluster)
 PAM.4 <- pam(wines[,-1], k=4,
     metric = "euclidean", 
     nstart = 50,
     stand = TRUE)
+table(wines[,1], PAM.4$clustering)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(PAM.4$clustering, wines[,1]),3)))
 ```
+
+# Variable Selection 
+
+## Principio filosofico {.tabset}
+_Novacula Occami: frustra fit per plura quod potest fieri per pauciora_ (Il rasoio di Occam: è futile fare con più mezzi ciò che si può fare con meno). Tale principio metodologico è ritenuto alla base del pensiero scientifico moderno.
+
+### Headlong
+```{r headlong, echo=FALSE, message=FALSE, warning=FALSE}
+subset.headlong <- clustvarsel(wines[,-1],G=3:4, search = 'headlong', direction = 'forward', parallel = T, verbose = F)
+
+headlong.selected <- subset.headlong$model
+table(wines[,1],headlong.selected$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(headlong.selected$classification, wines[,1]),3)))
+```
+### Greedy
+```{r Greedy, echo=FALSE, message=FALSE, warning=FALSE}
+subset.greedy <- clustvarsel(wines[,-1],G=3:4, search = 'greedy', direction = 'forward', parallel = T, verbose = F)
+
+greedy.selected <- subset.greedy$model
+table(wines[,1],greedy.selected$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(greedy.selected$classification, wines[,1]),3)))
+```
+### VSCC
+```{r VSCC, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+vscc.mclust <- vscc(wines[,-1], G=3:4, automate = "mclust", initial = NULL, train = NULL, forcereduction = TRUE)
+```
+
+```{r VSCCRESULT, message=FALSE, warning=FALSE}
+table(wines[,1], vscc.mclust$initialrun$classification) #Clustering results on full data set
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(vscc.mclust$initialrun$classification, wines[,1]),3)))
+table(wines[,1], vscc.mclust$bestmodel$classification) #Clustering results on reduced data set
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(vscc.mclust$bestmodel$classification, wines[,1]),3)))
+```
+### KMeansSparse 3
+```{r kmsparse3, echo=FALSE, message=FALSE, warning=FALSE}
+km.perm.3 <- KMeansSparseCluster.permute(wines[,-1],K=3,wbounds=seq(3,7,len=15),nperms=50,silent = T)
+
+km.sparse.3 <- KMeansSparseCluster(wines[,-1],K=3,wbounds=km.perm.3$bestw,nstart = 50, silent = T, maxiter=100)
+table(wines[,1],km.sparse.3[[1]]$Cs)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(km.sparse.3[[1]]$Cs, wines[,1]),3)))
+```
+### KMeansSparse 4
+```{r kmsparse4, echo=FALSE, message=FALSE, warning=FALSE}
+km.perm.4 <- KMeansSparseCluster.permute(wines[,-1],K=4,wbounds=seq(3,7,len=15),nperms=50,silent = T)
+
+km.sparse.4 <- KMeansSparseCluster(wines[,-1],K=4,wbounds=km.perm.4$bestw,nstart = 50, silent = T, maxiter=100)
+table(wines[,1],km.sparse.4[[1]]$Cs)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(km.sparse.4[[1]]$Cs, wines[,1]),3)))
+```
+
+
 ## Model-Based
 ```{r modelBased, message=FALSE, warning=FALSE}
 mixt.wines <- Mclust(wines[,-1],G=3:8)
@@ -251,37 +462,6 @@ teigen.hard <- teigen(wines[,-1], Gs=3:4, init = 'hard', scale = T)
 adjustedRandIndex(wines[,1],teigen.hard$classification)
 teigen.soft <- teigen(wines[,-1], Gs=3:4, init = 'soft', scale = T)
 adjustedRandIndex(wines[,1],teigen.soft$classification)
-```
-# Variable Selection
-```{r varSelection, message=FALSE, warning=FALSE}
-subset.headlong <- clustvarsel(wines[,-1],G=3:4, search = 'headlong', direction = 'forward', parallel = T)
-subset.greedy <- clustvarsel(wines[,-1],G=3:4, search = 'greedy', direction = 'forward', parallel = T)
-
-headlong.selected <- subset.headlong$model
-table(wines[,1],headlong.selected$classification)
-greedy.selected <- subset.greedy$model
-table(wines[,1],greedy.selected$classification)
-
-vscc.mclust <- vscc(wines[,-1], G=3:4, automate = "mclust", initial = NULL, train = NULL, forcereduction = FALSE)
-table(wines[,1], vscc.mclust$initialrun$classification) #Clustering results on full data set
-table(wines[,1], vscc.mclust$bestmodel$classification) #Clustering results on reduced data set
-
-km.perm.3 <- KMeansSparseCluster.permute(wines[,-1],K=3,wbounds=seq(3,7,len=15),nperms=50,silent = T)
-km.perm.4 <- KMeansSparseCluster.permute(wines[,-1],K=4,wbounds=seq(3,7,len=15),nperms=50,silent = T)
-# run sparse k-means
-km.sparse.3 <- KMeansSparseCluster(wines[,-1],K=3,wbounds=km.perm.3$bestw,nstart = 50, silent = T, maxiter=100)
-table(wines[,1],km.sparse.3[[1]]$Cs)
-km.sparse.4 <- KMeansSparseCluster(wines[,-1],K=4,wbounds=km.perm.4$bestw,nstart = 50, silent = T, maxiter=100)
-table(wines[,1],km.sparse.4[[1]]$Cs)
-#
-rho <- seq(1, 2, length=2)
-lasso <- SelvarClustLasso(wines[,-1], nbcluster=3:4,criterion="ICL",lambda=lambda,rho=rho,nbcores = 6)
-summary(lasso)
-lasso$S
-lasso$R
-lasso$U
-lasso$nbcluster
-table(wines[,1],lasso$partition)
 ```
 # Tecniche di regolarizzazione
 Per la nostra analisi abbiamo voluto verificare l'efficienza di tre noti modelli di regolarizzazione attraverso il pacchetto *caret*:
@@ -396,8 +576,6 @@ models <- list(ridge = caret::confusionMatrix(predictions.ridge, test$wine),
 ```
 
 # Parsimonious Gaussian Mixture Models
-## Principio filosofico
-_Novacula Occami: frustra fit per plura quod potest fieri per pauciora_ (Il rasoio di Occam: è futile fare con più mezzi ciò che si può fare con meno). Tale principio metodologico è ritenuto alla base del pensiero scientifico moderno. 
 ```{r advanced, message=FALSE, warning=FALSE}
 # Il rilassamento dato da (p-q)^2 > p+q è verificato per  1 <= q <= 20
 pg.random.ccc <- pgmmEM(selectedWines[,-1], rG=3:4, rq=1:5, seed = 1234, relax = T)
