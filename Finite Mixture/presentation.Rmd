@@ -20,6 +20,7 @@ loadPackages(c('sn','tidyverse','psych','RColorBrewer','stargazer','mclust','Con
                'vscc','sparcl','pgmm','caret','glmnet','MLmetrics','DT'))
 
 load("Z:\\DesktopC\\LUMSA\\2\\Data Mining\\Finite Mixture\\FiniteMixtureL31.RData")
+#load("H:\\smoxy\\Downloads\\FiniteMixtureL31.RData")
 rm(CO2data)
 rm(NOdata)
 rm(tonedata)
@@ -437,32 +438,78 @@ print(paste("AdjustedRandIndex:",round(adjustedRandIndex(km.sparse.4[[1]]$Cs, wi
 ```
 
 
-## Model-Based
-```{r modelBased, message=FALSE, warning=FALSE}
-mixt.wines <- Mclust(wines[,-1],G=3:8)
+## Model-Based {.tabset}
 
-cn.wines.mixt <- CNmixt(wines[,-1], G = 3, initialization = "mixt", seed = 1234, parallel = F, verbose = F)
-cn.wines.kmeans <- CNmixt(wines[,-1], G = 3, initialization = "kmeans", seed = 1234, parallel = F, verbose = F)
-cn.wines.rpost <- CNmixt(wines[,-1], G = 3, initialization = "random.post", seed = 1234, parallel = F, verbose = F)
-cn.wines.rclass <- CNmixt(wines[,-1], G = 3, initialization = "random.clas", seed = 1234, parallel = F, verbose = F)
-
-
-teigen.kmeans <- teigen(wines[,-1], Gs=3:4, init = 'kmeans', scale = T)
-adjustedRandIndex(wines[,1],teigen.kmeans$classification)
-
-teigen.classifier.kmeans <- teigen(train[,-1], Gs=3:4, init = 'kmeans', scale = T, known = train[,1])
-predict(teigen.classifier.kmeans,test[,-1])
-adjustedRandIndex(test[,1],predict(teigen.classifier.kmeans, test[,-1])$classification)
-
-teigen.classifier.uniform <- teigen(train[,-1], Gs=3:4, init = 'uniform', scale = T, known = train[,1])
-predict(teigen.classifier.uniform,test[,-1])
-adjustedRandIndex(test[,1],predict(teigen.classifier.uniform, test[,-1])$classification)
-
-teigen.hard <- teigen(wines[,-1], Gs=3:4, init = 'hard', scale = T)
-adjustedRandIndex(wines[,1],teigen.hard$classification)
-teigen.soft <- teigen(wines[,-1], Gs=3:4, init = 'soft', scale = T)
-adjustedRandIndex(wines[,1],teigen.soft$classification)
+### Mclust
+```{r Normal_Mixture, message=FALSE, warning=FALSE}
+mixt.wines <- Mclust(wines[,-1],G=3:8, verbose = F)
+table(wines[,1],mixt.wines$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],mixt.wines$classification),3)))
 ```
+
+### CNmixt
+```{r contaminated1, message=FALSE, warning=FALSE}
+cn.wines.mixt <- CNmixt(wines[,-1], G = 3, initialization = "mixt", seed = 1234, parallel = F, verbose = F)
+#table(wines[,1],cn.wines.mixt$)
+#print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],cn.wines.mixt$classification),3)))
+```
+
+### CNmixt kmeans
+```{r contaminated2, message=FALSE, warning=FALSE}
+cn.wines.kmeans <- CNmixt(wines[,-1], G = 3, initialization = "kmeans", seed = 1234, parallel = F, verbose = F)
+```
+### CNmixt rpost
+```{r contaminated3, message=FALSE, warning=FALSE}
+cn.wines.rpost <- CNmixt(wines[,-1], G = 3, initialization = "random.post", seed = 1234, parallel = F, verbose = F)
+```
+
+### CNmixt rclass
+```{r contaminated4, message=FALSE, warning=FALSE}
+cn.wines.rclass <- CNmixt(wines[,-1], G = 3, initialization = "random.clas", seed = 1234, parallel = F, verbose = F)
+```
+  - Multivariate t Distribution (teigen)
+  - Parsimonious Gaussian Mixture Models (pgmm)
+
+## Multivariate t Distribution {.tabset}
+
+### teigen kmeans
+```{r teigen, message=FALSE, warning=FALSE}
+teigen.kmeans <- teigen(wines[,-1], Gs=3:4, init = 'kmeans', scale = T)
+table(wines[,1],teigen.kmeans$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],teigen.kmeans$classification),3)))
+```
+### teigen hard
+```{r teigen hard, message=FALSE, warning=FALSE}
+teigen.hard <- teigen(wines[,-1], Gs=3:4, init = 'hard', scale = T)
+table(wines[,1],teigen.hard$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],teigen.hard$classification),3)))
+```
+
+### teigen soft
+```{r teigen soft, message=FALSE, warning=FALSE}
+teigen.soft <- teigen(wines[,-1], Gs=3:4, init = 'soft', scale = T)
+table(wines[,1],teigen.soft$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],teigen.soft$classification),3)))
+```
+
+### t-classifier kmeans
+```{r teigen kmeans, message=FALSE, warning=FALSE}
+teigen.classifier.kmeans <- teigen(train[,-1], Gs=3:4, init = 'kmeans', scale = T, known = train[,1])
+teigen.pre.kmeans = predict(teigen.classifier.kmeans,test[,-1])
+
+table(test[,1],teigen.pre.kmeans$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(test[,1],teigen.pre.kmeans$classification),3)))
+```
+
+### t-classifier uniform
+```{r teigen uniform, message=FALSE, warning=FALSE}
+teigen.classifier.uniform <- teigen(train[,-1], Gs=3:4, init = 'uniform', scale = T, known = train[,1])
+teigen.pre.uniform = predict(teigen.classifier.uniform,test[,-1])
+
+table(test[,1],teigen.pre.uniform$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(test[,1],teigen.pre.uniform$classification),3)))
+```
+
 # Tecniche di regolarizzazione
 Per la nostra analisi abbiamo voluto verificare l'efficienza di tre noti modelli di regolarizzazione attraverso il pacchetto *caret*:
 
