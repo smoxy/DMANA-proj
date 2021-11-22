@@ -1,26 +1,28 @@
 ---
-title: "Multivariate data analysis: a discriminating method of the origin of wines"
-output: 
+title: 'Multivariate data analysis: a discriminating method of the origin of wines'
+author: "Matteo Fasulo, Simone Flavio Paris, Matteo Sivoccia"
+date: "23/11/2021"
+output:
   html_notebook:
-    toc: true
-    toc_depth: 2
-author: 'Matteo Fasulo, Simone Flavio Paris, Matteo Sivoccia'
-
+    toc: yes
+    toc_depth: 3
+    number_sections: true
 ---
 ```{r loadEnv, message=FALSE, warning=FALSE}
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
 
 loadPackages(c('sn','tidyverse','car','RColorBrewer','stargazer','mclust','ContaminatedMixt',
-               'plotly','ggplot2','ggdendro','pgmm','teigen','tclust','HDMD','caTools','clustvarsel',
-               'vscc','sparcl','SelvarMix','pgmm','tidyverse','caret','glmnet','MLmetrics'))
+               'plotly','ggplot2','ggdendro','teigen','tclust','HDMD','caTools','clustvarsel',
+               'vscc','sparcl','SelvarMix','pgmm','caret','glmnet','MLmetrics'))
 
-load("C:\\Users\\Matte\\Documents\\LUMSA\\Data Mining\\finite_mixture\\FiniteMixtureL31.RData")
+load("Z:\\DesktopC\\LUMSA\\2\\Data Mining\\Finite Mixture\\FiniteMixtureL31.RData")
 rm(CO2data)
 rm(NOdata)
 rm(tonedata)
 type <- wine$Type
 rm(wine)
 ```
+# Introduzione
 Dati su 27 caratteristiche chimico/fisiche di tre diversi tipi di vino (Barolo, Grignolino, Barbera)
 dal Piemonte. Un set di dati con 178 osservazioni e 28 variabili (di cui la prima relativa alla tipologia di vino). Nell'ordine: 
 
@@ -28,6 +30,7 @@ dal Piemonte. Un set di dati con 178 osservazioni e 28 variabili (di cui la prim
 - Grignolino
 - Barbera
 
+## Annata del vino: un fattore da considerare?
 E' stato possibile attraverso la ricerca originaria risalire all'anno di osservazione di ciascun vino. Di seguito vengono riportate le osservazioni dei tre diversi tipi di vino durante gli anni:
 
 ```{r vinoAnni, message=FALSE, warning=FALSE}
@@ -53,15 +56,14 @@ wines %>%
   scale_fill_hue(l=40, c=35)+
   theme(legend.position = "none")
 ```
-E' chiaro che il Grignolino sia il più numeroso (39.9%) seguito dal Barolo (33.1%)e dal Barbera (27.0%).
+E' chiaro che il Grignolino sia il più numeroso (39.9%) seguito dal Barolo (33.1%) e dal Barbera (27.0%).
 
 Nella *matrix scatterplot*, le celle sulla diagonale mostrano gli istogrammi di ognuna delle variabili, in questo caso le concentrazioni delle prime 10 caratteristiche chimiche. Ognuna delle celle fuori dalla diagonale, rappresenta lo scatterplot di 2 delle 10 caratteristiche.
 
 ```{r scatterPlot, message=FALSE, warning=FALSE}
-#scatterplotMatrix(wines[2:10])
-#scatterplotMatrix(wines[11:20])
-#scatterplotMatrix(wines[21:28])
+scatterplotMatrix(wines[2:28])
 ```
+# Statistiche descrittive
 Per visualizzare le statistiche descrittive (media e deviazione standard) ci è sembrato opportuno dividerle in base alla classe di appartenenza:
 ```{r descriptive, message=FALSE, warning=FALSE}
 printMeanAndSdByGroup <- function(variables,groupvariable)
@@ -79,11 +81,13 @@ printMeanAndSdByGroup <- function(variables,groupvariable)
 }
 printMeanAndSdByGroup(wines[2:28],wines[1])
 ```
-Alcune considerazioni :
+Alcune considerazioni:
+
 - La media di sugar, potassium, magnesium, phosphate, chloride, flavanoids, proanthocyanins, colour nel Barolo è più alta.
 - La media di acidity, tartaric, malic, uronic, alcal_ash nel Barbera è più alta.
 - La deviazione standard di acidity è più alta nel Grignolino. 
 
+## Varianza Within
 Per tali motivi, abbiamo calcolato la varianza within tra una qualunque feature e i tipi di vino:
 ```{r withinVariance, message=FALSE, warning=FALSE}
 calcWithinGroupsVariance <- function(variable,groupvariable)
@@ -109,6 +113,7 @@ calcWithinGroupsVariance <- function(variable,groupvariable)
 }
 calcWithinGroupsVariance(wines[2],wines[1])
 ```
+## Varianza Between
 Stesso discorso per la varianza between tra una feature e i vini: 
 ```{r betweenVariance}
 calcBetweenGroupsVariance <- function(variable,groupvariable)
@@ -142,7 +147,22 @@ calcBetweenGroupsVariance <- function(variable,groupvariable)
 }
 calcBetweenGroupsVariance (wines[2],wines[1])
 ```
+# Splitting in Train e Test
+```{r splitTrainTest, message=FALSE, warning=FALSE}
+require(caTools)
+sample = sample.split(wines[,1], SplitRatio = .50)
 
+train = subset(wines, sample == TRUE)
+trainTestNames <- train$wine
+#train$wine <- as.numeric(train$wine)
+
+test  = subset(wines, sample == FALSE)
+wineTestNames <- test$wine
+#test$wine <- as.numeric(test$wine)
+```
+# Clustering
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+## Distance-Based
 ```{r distance, echo=FALSE, message=FALSE, warning=FALSE}
 dissMatrix    <- as.dist(pairwise.mahalanobis(wines[,-1], grouping = c(1:nrow(wines)), cov = cov(wines[,-1]))$distance)
 combDist <- function(distance, methods, df, dt, dissMatrix) {
@@ -191,20 +211,7 @@ best_dist_model = optimal(results)
 
 ggplotly(ggdendrogram(best_dist_model, rotate = F, size = 2, leaf_labels = T, labels = F))
 ```
-
-```{r splitTrainTest, message=FALSE, warning=FALSE}
-require(caTools)
-sample = sample.split(wines[,1], SplitRatio = .50)
-
-train = subset(wines, sample == TRUE)
-trainTestNames <- train$wine
-#train$wine <- as.numeric(train$wine)
-
-test  = subset(wines, sample == FALSE)
-wineTestNames <- test$wine
-#test$wine <- as.numeric(test$wine)
-```
-
+### K-Means e PAM
 ```{r partitioning, message=FALSE, warning=FALSE}
 require(cluster)
 k.means.3 <- kmeans(scale(wines[,-1]),centers=3,nstart = 50, iter.max = 100)
@@ -219,7 +226,7 @@ PAM.4 <- pam(wines[,-1], k=4,
     nstart = 50,
     stand = TRUE)
 ```
-
+## Model-Based
 ```{r modelBased, message=FALSE, warning=FALSE}
 mixt.wines <- Mclust(wines[,-1],G=3:8)
 
@@ -245,7 +252,7 @@ adjustedRandIndex(wines[,1],teigen.hard$classification)
 teigen.soft <- teigen(wines[,-1], Gs=3:4, init = 'soft', scale = T)
 adjustedRandIndex(wines[,1],teigen.soft$classification)
 ```
-
+# Variable Selection
 ```{r varSelection, message=FALSE, warning=FALSE}
 subset.headlong <- clustvarsel(wines[,-1],G=3:4, search = 'headlong', direction = 'forward', parallel = T)
 subset.greedy <- clustvarsel(wines[,-1],G=3:4, search = 'greedy', direction = 'forward', parallel = T)
@@ -276,7 +283,7 @@ lasso$U
 lasso$nbcluster
 table(wines[,1],lasso$partition)
 ```
-## Tecniche di regolarizzazione
+# Tecniche di regolarizzazione
 Per la nostra analisi abbiamo voluto verificare l'efficienza di tre noti modelli di regolarizzazione attraverso il pacchetto *caret*:
 
 - Ridge
@@ -284,10 +291,10 @@ Per la nostra analisi abbiamo voluto verificare l'efficienza di tre noti modelli
 - Elastic Net
 
 ```{r lambdaTuning, message=FALSE, warning=FALSE}
-lambda <- 10^seq(.001, .1, by = .001)
+lambda <- 10^seq(0, -2, length = 250)
 ```
 
-### Ridge
+## Ridge
 Il modello *Ridge* riduce i coefficienti, in modo che le variabili, con un contributo minore al risultato, abbiano i loro coefficienti vicini allo zero. Invece di forzarli a essere esattamente zero (come nel *Lasso*), li penalizziamo con un termine chiamato *norma L2* costringendoli così a essere piccoli. In questo modo diminuiamo la complessità del modello senza eliminare nessuna variabile attraverso una costante chiamata lambda ($\lambda$) di penalizzazione:
 $$
 L_{ridge}(\hat{\beta}) = \sum_{i = 1}^{n}{(y_i - x_i\hat{\beta})^2} + \lambda\sum_{k = 1}^{K}{\hat{\beta}_k^2}
@@ -301,23 +308,23 @@ ridge <- caret::train(
   y = factor(train[,1]),
   method = "glmnet",
   trControl = trainControl("cv", number = 10, classProbs = TRUE, summaryFunction = multiClassSummary),
-  tuneGrid = expand.grid(alpha = 0),
-  metric="ROC")
+  tuneGrid = expand.grid(alpha = 0, lambda=lambda),
+  metric="Accuracy")
 # Model coefficients
 coef(ridge$finalModel, ridge$bestTune$lambda)
 # Make predictions
-predictions <- ridge %>% predict(test)
+predictions.ridge <- ridge %>% predict(test)
 # Model prediction performance
 tibble(
   trueValue = wineTestNames,
-  predictedValue = predictions)
-```
-```{r ridgeResult}
-caret::confusionMatrix(predictions, test$wine)
+  predictedValue = predictions.ridge)
 ```
 Il ridge è composto dalla somma dei residui quadrati più una penalità, definita dalla lettera Lambda, che è moltiplicata per la somma dei coefficienti quadrati $\beta$. Quando $\lambda = 0$, il termine di penalità non ha alcun effetto e il ridge produrrà i coefficienti minimi quadrati classici. Tuttavia, quando $\lambda$ aumenta all’infinito, l’impatto della penalità aumenta e i coefficienti si avvicinano allo zero. Il ridge è particolarmente indicato quando si hanno molti dati multivariati con numero di feature maggiore del numero di osservazioni. Lo svantaggio, però, è che includerà tutti le feature nel modello finale, a differenza dei metodi di feature selection, che generalmente selezioneranno un insieme ridotto di variabili tra quelle disponibili.
+```{r ridgeResult}
+caret::confusionMatrix(predictions.ridge, test$wine)
+```
 
-### Lasso
+## Lasso
 Il *Least Absolute Shrinkage and Selection Operator* (LASSO) riduce i coefficienti verso lo zero penalizzando il modello con un termine di penalità chiamato *norma L1*, che è la somma dei coefficienti in valore assoluto:
 $$
 L_{lasso}(\hat{\beta}) = \sum_{i = 1}^{n}{(y_i - x_i\hat{\beta})^2} + \lambda\sum_{k = 1}^{K}{|\hat{\beta}_k|}
@@ -326,54 +333,71 @@ $$
 # Build the model
 set.seed(123)
 lasso <- caret::train(
-  wine ~., data = train, method = "glmnet",
-  trControl = trainControl("cv", number = 10),
-  tuneGrid = expand.grid(alpha = 1, lambda = lambda)
-  )
+  x = train[,-1],
+  y = factor(train[,1]),
+  method = "glmnet",
+  trControl = trainControl("cv", number = 10, classProbs = TRUE, summaryFunction = multiClassSummary),
+  tuneGrid = expand.grid(alpha = 1, lambda=lambda),
+  metric="Accuracy")
 # Model coefficients
 coef(lasso$finalModel, lasso$bestTune$lambda)
 # Make predictions
-predictions <- lasso %>% predict(test)
+predictions.lasso <- lasso %>% predict(test)
 # Model prediction performance
-data.frame(
-  RMSE = RMSE(predictions, test$wine),
-  Rsquare = R2(predictions, test$wine)
-)
+tibble(
+  trueValue = wineTestNames,
+  predictedValue = predictions.lasso)
 ```
 In questo caso la penalità ha l’effetto di forzare alcune delle stime dei coefficienti, con un contributo minore al modello, a essere esattamente uguale a zero. Il lasso, quindi, può anche essere visto come un’alternativa ai metodi di feature selection per eseguire la selezione delle variabili al fine di ridurre la complessità del modello.
 
 Come nel ridge, è fondamentale selezionare un buon valore di $\lambda$.
 
 Quando lambda è piccolo, il risultato è molto vicino alla stima dei minimi quadrati. All’aumentare di lambda, si verifica una contrazione in modo da poter eliminare le variabili che sono a zero.
+```{r lassoResult, message=FALSE, warning=FALSE}
+caret::confusionMatrix(predictions.lasso, test$wine)
+```
 
-### Elastic Net
+## Elastic Net
 Elastic Net combina le proprietà di Ridge e Lasso penalizzando il modello usando sia la norma L2 che la norma L1:
 $$
-L_{E    lasticNet}(\hat{\beta}) = \frac{\sum_{i = 1}^{n}{(y_i - x_i\hat{\beta})^2}}{2n} + \lambda(\frac{1-\alpha}{2}\sum_{k = 1}^{K}{\hat{\beta}_k^2} + \alpha\sum_{k = 1}^{K}{|\hat{\beta}_k}|)
+L_{ElasticNet}(\hat{\beta}) = \frac{\sum_{i = 1}^{n}{(y_i - x_i\hat{\beta})^2}}{2n} + \lambda(\frac{1-\alpha}{2}\sum_{k = 1}^{K}{\hat{\beta}_k^2} + \alpha\sum_{k = 1}^{K}{|\hat{\beta}_k}|)
 $$
 ```{r caretElastic, message=FALSE, warning=FALSE}
 set.seed(123)
 elastic <- caret::train(
-  wine ~., data = train, method = "glmnet",
-  trControl = trainControl("cv", number = 10),
-  tuneLength = 10
-  )
+  x = train[,-1],
+  y = factor(train[,1]),
+  method = "glmnet",
+  trControl = trainControl("cv", number = 10, classProbs = TRUE, summaryFunction = multiClassSummary),
+  metric="Accuracy")
 # Model coefficients
 coef(elastic$finalModel, elastic$bestTune$lambda)
 # Make predictions
-predictions <- elastic %>% predict(test)
+predictions.enet <- elastic %>% predict(test)
 # Model prediction performance
-data.frame(
-  RMSE = RMSE(predictions, test$wine),
-  Rsquare = R2(predictions, test$wine)
-)
-models <- list(ridge = ridge, lasso = lasso, elastic = elastic)
-resamples(models) %>% summary(metric = "RMSE")
+tibble(
+  trueValue = wineTestNames,
+  predictedValue = predictions.enet)
 ```
 Oltre a impostare e scegliere un valore lambda, l’*elastic net* ci consente anche di ottimizzare il parametro alfa dove $\alpha = 0$ corrisponde a *ridge* e $\alpha = 1$ al *lasso*.
 
 Pertanto possiamo scegliere un valore $\alpha$ compreso tra 0 e 1 per ottimizzare l’elastic net. Se tale valore è incluso in questo intervallo, si avrà una riduzione con alcuni portati a $0$.
 
+```{r enetResult, message=FALSE, warning=FALSE}
+caret::confusionMatrix(predictions.enet, test$wine)
+```
+
+## Summary delle prestazioni
+```{r confMatrix, message=FALSE, warning=FALSE}
+models <- list(ridge = caret::confusionMatrix(predictions.ridge, test$wine), 
+               lasso = caret::confusionMatrix(predictions.lasso,test$wine),
+               elastic = caret::confusionMatrix(predictions.enet,test$wine))
+#models %>% summary(metric = "Accuracy")
+```
+
+# Parsimonious Gaussian Mixture Models
+## Principio filosofico
+_Novacula Occami: frustra fit per plura quod potest fieri per pauciora_ (Il rasoio di Occam: è futile fare con più mezzi ciò che si può fare con meno). Tale principio metodologico è ritenuto alla base del pensiero scientifico moderno. 
 ```{r advanced, message=FALSE, warning=FALSE}
 # Il rilassamento dato da (p-q)^2 > p+q è verificato per  1 <= q <= 20
 pg.random.ccc <- pgmmEM(selectedWines[,-1], rG=3:4, rq=1:5, seed = 1234, relax = T)
