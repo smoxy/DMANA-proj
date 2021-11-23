@@ -520,7 +520,7 @@ print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],teigen.soft$c
 ### t-classifier kmeans
 ```{r teigen kmeans, message=FALSE, warning=FALSE}
 teigen.classifier.kmeans <- teigen(train[,-1], Gs=3:4, init = 'kmeans', scale = T, known = train[,1], verbose = F)
-teigen.pre.kmeans = predict(teigen.classifier.kmeans,test[,-1])
+teigen.pre.kmeans = predict(teigen.classifier.kmeans,newdata=test[,-1])
 
 table(test[,1],teigen.pre.kmeans$classification)
 print(paste("AdjustedRandIndex:",round(adjustedRandIndex(test[,1],teigen.pre.kmeans$classification),3)))
