@@ -11,13 +11,14 @@ output:
     theme: united
     highlight: tango
     df_print: paged
+    code_folding: hide
 ---
 ```{r loadEnv, message=FALSE, warning=FALSE}
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
 
 loadPackages(c('sn','tidyverse','psych','RColorBrewer','stargazer','mclust','ContaminatedMixt',
                'plotly','ggplot2','ggdendro','teigen','tclust','HDMD','caTools','clustvarsel',
-               'vscc','sparcl','pgmm','caret','glmnet','MLmetrics','DT'))
+               'vscc','sparcl','pgmm','caret','glmnet','MLmetrics'))
 
 load("Z:\\DesktopC\\LUMSA\\2\\Data Mining\\Finite Mixture\\FiniteMixtureL31.RData")
 #load("H:\\smoxy\\Downloads\\FiniteMixtureL31.RData")
@@ -70,7 +71,6 @@ E' chiaro che il Grignolino sia il più numeroso (39.9%) seguito dal Barolo (33.
 Per rappresentare la dispersione dei dati abbiamo usato uno scatterplot leggermente differente dal solito. Sulla diagonale superiore si vede la distribuzione dei dati mentre sulla diagonale inferiore vi è la _correlazione di Pearson_ tra le variabili.
 
 ```{r scatterPlot, message=FALSE, warning=FALSE}
-# Correlation panel
 my_cols <- c("#00AFBB", "#E7B800", "#FC4E07") 
 panel.cor <- function(x, y){
     usr <- par("usr"); on.exit(par(usr))
@@ -79,11 +79,9 @@ panel.cor <- function(x, y){
     txt <- paste0("R = ", r)
     text(0.5, 0.5, txt, cex = 1)
 }
-# Customize upper panel
 upper.panel<-function(x, y){
   points(x,y, pch = 19, col = my_cols[wines$wine],cex=.5)
 }
-# Create the plots
 pairs(wines[,2:8], 
       lower.panel = panel.cor,
       upper.panel = upper.panel)
@@ -174,12 +172,9 @@ Per vedere quali variabili hanno la maggiore separazione, (rapporto tra Varianza
 ```{r separation, message=FALSE, warning=FALSE}
 calcSeparations <- function(variables,groupvariable)
   {
-     # find out how many variables we have
      variables <- as.data.frame(variables)
      numvariables <- length(variables)
-     # find the variable names
      variablenames <- colnames(variables)
-     # calculate the separation for each variable
      Vw <- NULL
      Vb <- NULL
      sep <- NULL
@@ -411,7 +406,7 @@ print(paste("AdjustedRandIndex:",round(adjustedRandIndex(greedy.selected$classif
 ```
 ### VSCC
 ```{r VSCC, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
-vscc.mclust <- vscc(wines[,-1], G=3:4, automate = "mclust", initial = NULL, train = NULL, forcereduction = TRUE)
+vscc.mclust <- vscc(wines[,-1], G=3:4, automate = "mclust", initial = NULL, train = NULL, forcereduction = T)
 ```
 
 ```{r VSCCRESULT, message=FALSE, warning=FALSE}
@@ -436,65 +431,86 @@ km.sparse.4 <- KMeansSparseCluster(wines[,-1],K=4,wbounds=km.perm.4$bestw,nstart
 table(wines[,1],km.sparse.4[[1]]$Cs)
 print(paste("AdjustedRandIndex:",round(adjustedRandIndex(km.sparse.4[[1]]$Cs, wines[,1]),3)))
 ```
+Le variabili selezionate dalla funzione *clustervarsel* sono:
+
+- flavanoids, OD_dw, proline, colour, uronic, malic, chloride
+
+Le variabili selezionate dalla funzione *vscc* sono:
+
+- flavanoids, OD_dw, proline, colour, alcohol, OD_fl, hue, phenols, uronic, tartaric
 
 
 ## Model-Based {.tabset}
 
 ### Mclust
-```{r Normal_Mixture, message=FALSE, warning=FALSE}
-mixt.wines <- Mclust(wines[,-1],G=3:8, verbose = F)
-table(wines[,1],mixt.wines$classification)
-print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],mixt.wines$classification),3)))
+```{r Normal_Mixture, message=FALSE, warOD_dwning=FALSE}
+selectedWines <- wines[,c('flavanoids','OD_dw','proline','colour','alcohol','OD_fl','hue','phenols','uronic','tartaric')]
+
+mixt.selected.wines <- Mclust(selectedWines,G=3:8, verbose = F)
+
+table(wines[,1],mixt.selected.wines$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],mixt.selected.wines$classification),3)))
+
+#summary(mixt.selected.wines)
+#plot.Mclust(mixt.selected.wines, what = 'classification', addEllipses = TRUE)
+
+#mixt.wines <- Mclust(wines[,-1],G=3:8, verbose = F)
+#table(wines[,1],mixt.wines$classification)
+#print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],mixt.wines$classification),3)))
 ```
 
 ### CNmixt
 ```{r contaminated1, message=FALSE, warning=FALSE}
-cn.wines.mixt <- CNmixt(wines[,-1], G = 3, initialization = "mixt", seed = 1234, parallel = F, verbose = F)
-#table(wines[,1],cn.wines.mixt$)
-#print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],cn.wines.mixt$classification),3)))
+cn.wines.mixt <- CNmixt(selectedWines, G = 3, initialization = "mixt", seed = 1234, parallel = F, verbose = F)
+table(wines[,1],getBestModel(cn.wines.mixt, criterion = 'ICL')$models[[1]]$group)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],getBestModel(cn.wines.mixt, criterion = 'ICL')$models[[1]]$group),3)))
 ```
 
 ### CNmixt kmeans
 ```{r contaminated2, message=FALSE, warning=FALSE}
-cn.wines.kmeans <- CNmixt(wines[,-1], G = 3, initialization = "kmeans", seed = 1234, parallel = F, verbose = F)
+cn.wines.kmeans <- CNmixt(selectedWines, G = 3, initialization = "kmeans", seed = 1234, parallel = F, verbose = F)
+table(wines[,1],getBestModel(cn.wines.kmeans, criterion = 'ICL')$models[[1]]$group)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],getBestModel(cn.wines.kmeans, criterion = 'ICL')$models[[1]]$group),3)))
 ```
 ### CNmixt rpost
 ```{r contaminated3, message=FALSE, warning=FALSE}
-cn.wines.rpost <- CNmixt(wines[,-1], G = 3, initialization = "random.post", seed = 1234, parallel = F, verbose = F)
+cn.wines.rpost <- CNmixt(selectedWines, G = 3, initialization = "random.post", seed = 1234, parallel = F, verbose = F)
+table(wines[,1],getBestModel(cn.wines.rpost, criterion = 'ICL')$models[[1]]$group)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],getBestModel(cn.wines.rpost, criterion = 'ICL')$models[[1]]$group),3)))
 ```
 
 ### CNmixt rclass
 ```{r contaminated4, message=FALSE, warning=FALSE}
-cn.wines.rclass <- CNmixt(wines[,-1], G = 3, initialization = "random.clas", seed = 1234, parallel = F, verbose = F)
+cn.wines.rclass <- CNmixt(selectedWines, G = 3, initialization = "random.clas", seed = 1234, parallel = F, verbose = F)
+table(wines[,1],getBestModel(cn.wines.rclass, criterion = 'ICL')$models[[1]]$group)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],getBestModel(cn.wines.rclass, criterion = 'ICL')$models[[1]]$group),3)))
 ```
-  - Multivariate t Distribution (teigen)
-  - Parsimonious Gaussian Mixture Models (pgmm)
 
 ## Multivariate t Distribution {.tabset}
 
 ### teigen kmeans
 ```{r teigen, message=FALSE, warning=FALSE}
-teigen.kmeans <- teigen(wines[,-1], Gs=3:4, init = 'kmeans', scale = T)
+teigen.kmeans <- teigen(selectedWines, Gs=3:4, init = 'kmeans', scale = T, verbose = F)
 table(wines[,1],teigen.kmeans$classification)
 print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],teigen.kmeans$classification),3)))
 ```
 ### teigen hard
 ```{r teigen hard, message=FALSE, warning=FALSE}
-teigen.hard <- teigen(wines[,-1], Gs=3:4, init = 'hard', scale = T)
+teigen.hard <- teigen(selectedWines, Gs=3:4, init = 'hard', scale = T, verbose = F)
 table(wines[,1],teigen.hard$classification)
 print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],teigen.hard$classification),3)))
 ```
 
 ### teigen soft
 ```{r teigen soft, message=FALSE, warning=FALSE}
-teigen.soft <- teigen(wines[,-1], Gs=3:4, init = 'soft', scale = T)
+teigen.soft <- teigen(selectedWines, Gs=3:4, init = 'soft', scale = T, verbose = F)
 table(wines[,1],teigen.soft$classification)
 print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],teigen.soft$classification),3)))
 ```
 
 ### t-classifier kmeans
 ```{r teigen kmeans, message=FALSE, warning=FALSE}
-teigen.classifier.kmeans <- teigen(train[,-1], Gs=3:4, init = 'kmeans', scale = T, known = train[,1])
+teigen.classifier.kmeans <- teigen(train[,-1], Gs=3:4, init = 'kmeans', scale = T, known = train[,1], verbose = F)
 teigen.pre.kmeans = predict(teigen.classifier.kmeans,test[,-1])
 
 table(test[,1],teigen.pre.kmeans$classification)
@@ -503,7 +519,7 @@ print(paste("AdjustedRandIndex:",round(adjustedRandIndex(test[,1],teigen.pre.kme
 
 ### t-classifier uniform
 ```{r teigen uniform, message=FALSE, warning=FALSE}
-teigen.classifier.uniform <- teigen(train[,-1], Gs=3:4, init = 'uniform', scale = T, known = train[,1])
+teigen.classifier.uniform <- teigen(train[,-1], Gs=3:4, init = 'uniform', scale = T, known = train[,1], verbose = F)
 teigen.pre.uniform = predict(teigen.classifier.uniform,test[,-1])
 
 table(test[,1],teigen.pre.uniform$classification)
@@ -616,77 +632,72 @@ caret::confusionMatrix(predictions.enet, test$wine)
 
 ## Summary delle prestazioni
 ```{r confMatrix, message=FALSE, warning=FALSE}
-models <- list(ridge = caret::confusionMatrix(predictions.ridge, test$wine), 
-               lasso = caret::confusionMatrix(predictions.lasso,test$wine),
-               elastic = caret::confusionMatrix(predictions.enet,test$wine))
-#models %>% summary(metric = "Accuracy")
+models <- list(ridge = caret::confusionMatrix(predictions.ridge, test$wine)$overall[1], 
+               lasso = caret::confusionMatrix(predictions.lasso,test$wine)$overall[1],
+               elastic = caret::confusionMatrix(predictions.enet,test$wine)$overall[1])
+for(j in 1:length(models)){
+  print(paste("Accuracy of",names(models[j]),"=",round(models[[j]],3)))
+}
 ```
-
 # Parsimonious Gaussian Mixture Models
 ```{r advanced, message=FALSE, warning=FALSE}
+dist <- dist(wines[,-1], method = "manhattan")
+dendo <- hclust(dist, method = "ward.D")
+custom <- list()
+for (i in 3:4){
+  custom[[i]] = cutree(dendo, k=i)
+}
+
+models_to_run <- c("UCU", "UCC", "CUU", "CUC", "CCU", "CCC")
+
 # Il rilassamento dato da (p-q)^2 > p+q è verificato per  1 <= q <= 20
-pg.random.ccc <- pgmmEM(selectedWines[,-1], rG=3:4, rq=1:5, seed = 1234, relax = T)
-adjustedRandIndex(wines[,1],pg.random.ccc$map)
+pg.kmeans <- pgmmEM(scale(wines[,-1]), rG=3:4, rq=1:7, icl=T, zstart=2,seed=1234, modelSubset=models_to_run)
+table(wines[,1],pg.kmeans$map)
+adjustedRandIndex(wines[,1],pg.kmeans$map)
 
-pg.random <- pgmmEM(wines[,-1], rG=3:4, rq=20:25,icl=F,zstart = 1,cccStart = F,loop = 50, seed = 1234, relax = T)
-adjustedRandIndex(wines[,1],pg.random.ccc$map)
-
-pg2 <- pgmmEM(wines[,-1], rG=3:4, rq=20:25,icl=T,zstart = 1,cccStart = T,loop = 50, seed = 1234, relax = T)
-adjustedRandIndex(wines[,1],pg2$map)
-
-pg2 <- pgmmEM(wines[,-1], rG=3:4, rq=20:25,icl=T,zstart = 2, seed = 1234, relax = T)
-adjustedRandIndex(wines[,1],pg2$map)
-
-pg2 <- pgmmEM(wines[,-1], rG=3:4, rq=20:25,icl=T,zstart = 3, seed = 1234, relax = T, zlist=)
-adjustedRandIndex(wines[,1],pg2$map)
-
-
-
-
-agree(cn.wines.mixt, givgroup = wines[,1])
-agree(cn.wines.kmeans, givgroup = wines[,1])
-agree(cn.wines.rpost, givgroup = wines[,1])
-agree(cn.wines.rclass, givgroup = wines[,1])
-
-plot(cn.wines.mixt, contours = TRUE)
-plot(cn.wines.kmeans, contours = TRUE)
-plot(cn.wines.rpost, contours = TRUE)
-plot(cn.wines.rclass, contours = TRUE)
+pg.manhattan <- pgmmEM(scale(wines[,-1]), rG=3:4, rq=1:7, icl=T, zstart = 3, seed = 1234, zlist = custom, modelSubset=models_to_run)
+table(wines[,1],pg.manhattan$map)
+adjustedRandIndex(wines[,1],pg.manhattan$map)
 ```
 
-if (class(models[[i]])=='kmeans'){
-      ariTrain[i] <- adjustedRandIndex(train,models[[i]]$cluster)
-      ariTest[i] <- adjustedRandIndex(test,models[[i]]$cluster)
-      bic[i] <- NA
-      icl[i] <- NA
-      G[i] <- length(unique(models[[i]]$cluster))
-
-
-```{r summaryOfAllModels, message=FALSE, warning=FALSE}
-summaryOfModels <- function(train, test, models){
+# Confronto finale
+```{r summaryOfAllModels, message=FALSE, warning=FALSE, rows.print=17}
+summaryOfModels <- function(df, models){
   nModel <- length(models)
-  ariTrain <- NULL
-  ariTest <- NULL
+  ari <- NULL
   bic <- NULL
   icl <- NULL
   G <- NULL
   for(i in 1:nModel){
-           if (class(models[[i]])=='Mclust'){
-      ariTrain[i] <- adjustedRandIndex(train,models[[i]]$classification)
-      ariTest[i] <- adjustedRandIndex(test,predict(models[[i]],test)$classification)
+    if (class(models[[i]])=='kmeans'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$cluster)
+      bic[i] <- NA
+      icl[i] <- NA
+      G[i] <- length(unique(models[[i]]$cluster))
+    } else if (class(models[[i]])=='pam') {
+      ari[i] <- adjustedRandIndex(df,models[[i]]$clustering)
+      bic[i] <- NA
+      icl[i] <- NA
+      G[i] <- length(models[[i]]$id.med)
+    } else if (class(models[[i]])=='KMeansSparseCluster'){
+      modelName <- models[[i]]
+      ari[i] <- adjustedRandIndex(df,modelName[[1]]$Cs)
+      bic[i] <- NA
+      icl[i] <- NA
+      G[i] <- modelName[[1]]$wbound
+    } else if (class(models[[i]])=='Mclust'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$classification)
       bic[i] <- models[[i]]$bic
       icl[i] <- models[[i]]$icl
       G[i] <- models[[i]]$G
     } else if (class(models[[i]])=='ContaminatedMixt'){
-      bestModel <- getBestModel(models[[i]])$models[[1]]
-      ariTrain[i] <- adjustedRandIndex(train,bestModel$group)
-      ariTest[i] <- adjustedRandIndex(test,predict(bestModel,))
-      bic[i] <- whichBestModel(models[[i]],train)$BIC
-      icl[i] <- whichBestModel(models[[i]],train)$ICL
-      G[i] <- whichBestModel(models[[i]],train)$G
+      bestModel <- getBestModel(models[[i]], criterion = 'ICL')$models[[1]]
+      ari[i] <- adjustedRandIndex(df,bestModel$group)
+      bic[i] <- bestModel$IC$BIC
+      icl[i] <- bestModel$IC$ICL
+      G[i] <- bestModel$G
     } else if (class(models[[i]])=='teigen'){
-      ariTrain[i] <- adjustedRandIndex(train,models[[i]]$iclresults$classification)
-      ariTest[i] <- adjustedRandIndex(test,models[[i]]$iclresults$classification)
+      ari[i] <- adjustedRandIndex(df,models[[i]]$iclresults$classification)
       bic[i] <- models[[i]]$bic
       icl[i] <- models[[i]]$iclresults$icl
       G[i] <- models[[i]]$G
@@ -710,10 +721,51 @@ summaryOfModels <- function(train, test, models){
                          'BIC' = bic,
                          'ICL' = icl,
                          'G' = as.integer(G),
-                         row.names = c('KMeans','Mclust','ContaminatedMixt','TEigen','PGMM','TClust'),
+                         row.names = c('KMeans3',
+                                       'KMeans4',
+                                       'PAM3',
+                                       'PAM4',
+                                       'VS-Greedy',
+                                       'VS-Headlong',
+                                       'VSCC',
+                                       'KMeansSparse3',
+                                       'KMeansSparse4',
+                                       'VS-MVN',
+                                       'VS-Contaminated Mixt',
+                                       'VS-VS-Contaminated KMeans',
+                                       'VS-Contaminated RPost',
+                                       'VS-Contaminated RClass',
+                                       'VS-TEigen KMeans',
+                                       'VS-TEigen Hard',
+                                       'VS-TEigen Soft'),
                          stringsAsFactors = F)
   return(outputDF)
 }
-test <- summaryOfModels(wines[,1],list(k.means,mixt.wines,mixt.cn.wines,teigen_wine,pippo,trimmedOne))
-test
+test <- summaryOfModels(wines[,1],list(
+                             k.means.3,
+                             k.means.4,
+                             PAM.3,
+                             PAM.4,
+                             subset.greedy$model,
+                             subset.headlong$model,
+                             vscc.mclust$bestmodel,
+                             km.sparse.3,
+                             km.sparse.4,
+                             mixt.selected.wines,
+                             cn.wines.mixt,
+                             cn.wines.kmeans,
+                             cn.wines.rpost,
+                             cn.wines.rclass,
+                             teigen.kmeans,
+                             teigen.hard,
+                             teigen.soft))
+print(test, n=20)
 ```
+# Modellazione 3D
+```{r 3ds, message=FALSE, warning=FALSE}
+# best 3 for separation
+plot3d(wines$flavanoids, wines$OD_dw, wines$proline, type='s', size=2, col=as.numeric(wines$wine))
+# worst 3 for separation
+plot3d(wines$methanol, wines$potassium, wines$pH, type='s', size=2, col=as.numeric(wines$wine))
+```
+
