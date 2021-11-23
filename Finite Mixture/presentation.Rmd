@@ -6,11 +6,20 @@ output:
   html_notebook:
     toc: yes
     toc_depth: 3
-    number_sections: true
-    toc_float: true
+    number_sections: yes
+    toc_float: yes
     theme: united
     highlight: tango
     df_print: paged
+    code_folding: hide
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+    number_sections: yes
+    toc_float: yes
+    theme: united
+    highlight: tango
     code_folding: hide
 ---
 ```{r loadEnv, message=FALSE, warning=FALSE}
@@ -18,7 +27,7 @@ source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/co
 
 loadPackages(c('sn','tidyverse','psych','RColorBrewer','stargazer','mclust','ContaminatedMixt',
                'plotly','ggplot2','ggdendro','teigen','tclust','HDMD','caTools','clustvarsel',
-               'vscc','sparcl','pgmm','caret','glmnet','MLmetrics'))
+               'vscc','sparcl','pgmm','caret','glmnet','MLmetrics','rgl'))
 
 load("Z:\\DesktopC\\LUMSA\\2\\Data Mining\\Finite Mixture\\FiniteMixtureL31.RData")
 #load("H:\\smoxy\\Downloads\\FiniteMixtureL31.RData")
@@ -228,7 +237,7 @@ Per il Clustering abbiamo deciso di applicare:
 
 ## Distance-Based
 ```{r distance, message=FALSE, warning=FALSE}
-dissMatrix    <- pairwise.mahalanobis(wines[,-1],
+dissMatrix <- pairwise.mahalanobis(wines[,-1],
                                       grouping = c(1:nrow(wines)),
                                       cov = cov(wines[,-1]))$distance
 dissMatrix <- sqrt(dissMatrix)
