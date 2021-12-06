@@ -184,13 +184,13 @@ X[which(X$wine==3),1] <- "Barbera"
 ```{r knnPC1, message=FALSE, warning=FALSE}
 trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
 set.seed(3333)
-knn_fit <- caret::train(wine ~ .-pc.comp2, data = X[intrain,], method = "knn",
+knn_fit.PC1 <- caret::train(wine ~ .-pc.comp2, data = X[intrain,], method = "knn",
                  trControl=trctrl,
                  preProcess = c("center", "scale"),
                  tuneLength = 10)
-print(knn_fit)
-plot(knn_fit)
-test_pred <- predict(knn_fit, newdata = X[-intrain,])
+print(knn_fit.PC1)
+plot(knn_fit.PC1)
+test_pred <- predict(knn_fit.PC1, newdata = X[-intrain,])
 confusionMatrix(test_pred, as.factor(X[-intrain,'wine']))
 ```
 
@@ -198,26 +198,26 @@ confusionMatrix(test_pred, as.factor(X[-intrain,'wine']))
 ```{r knnPC2, message=FALSE, warning=FALSE}
 trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
 set.seed(3333)
-knn_fit <- caret::train(wine ~ .-pc.comp1, data = X[intrain,], method = "knn",
+knn_fit.PC2 <- caret::train(wine ~ .-pc.comp1, data = X[intrain,], method = "knn",
                  trControl=trctrl,
                  preProcess = c("center", "scale"),
                  tuneLength = 10)
-print(knn_fit)
-plot(knn_fit)
-test_pred <- predict(knn_fit, newdata = X[-intrain,])
+print(knn_fit.PC2)
+plot(knn_fit.PC2)
+test_pred <- predict(knn_fit.PC2, newdata = X[-intrain,])
 confusionMatrix(test_pred, as.factor(X[-intrain,'wine']))
 ```
 ## KNN-PC1+PC2 
 ```{r knnPC1+PC2, message=FALSE, warning=FALSE}
 trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
 set.seed(3333)
-knn_fit <- caret::train(wine ~ ., data = X[intrain,], method = "knn",
+knn_fit.PC12 <- caret::train(wine ~ ., data = X[intrain,], method = "knn",
                  trControl=trctrl,
                  preProcess = c("center", "scale"),
                  tuneLength = 10)
-print(knn_fit)
-plot(knn_fit)
-test_pred <- predict(knn_fit, newdata = X[-intrain,])
+print(knn_fit.PC12)
+plot(knn_fit.PC12)
+test_pred <- predict(knn_fit.PC12, newdata = X[-intrain,])
 confusionMatrix(test_pred, as.factor(X[-intrain,'wine']))
 ```
 
@@ -231,6 +231,24 @@ knn_fit <- train(wine ~.-year, data = wines[intrain,], method = "knn",
                  tuneLength = 10)
 print(knn_fit)
 plot(knn_fit)
+
 test_pred <- predict(knn_fit, newdata = wines[-intrain,])
 confusionMatrix(test_pred, as.factor(wines[-intrain,1]))
+```
+
+## KNN comparison
+```{r knn Comparison, message=FALSE, warning=FALSE}
+knn.accuracyData = as.data.frame(cbind(PC1 = knn_fit.PC1$results$Accuracy,
+                                       PC2 = knn_fit.PC2$results$Accuracy,
+                                       PC12= knn_fit.PC12$results$Accuracy,
+                                       NO_PCA = knn_fit$results$Accuracy))
+
+ggplot(knn.accuracyData, aes(knn_fit.PC1$results$k)) + 
+  geom_line(aes(y = PC1, colour = "PC1"), size=1) + geom_point(aes(y = PC1)) +
+  geom_line(aes(y = PC2, colour = "PC2"), size=1) + geom_point(aes(y = PC2)) +
+  geom_line(aes(y = PC12, colour = "PC1&2"), size=1) + geom_point(aes(y = PC12)) +
+  geom_line(aes(y = NO_PCA, colour = "Normal"), size=1) + geom_point(aes(y = NO_PCA)) +
+  scale_color_manual(name = "Y series", values = c("PC1" = "#003fa3", "PC2" = "#00a375", "PC1&2" = "#9800a3", "Normal" = "#a3003c")) +
+  ggtitle("Comparison between Components") +
+  xlab("#Neighbors") + ylab("Accuracy (Repeated Cross Validation)")
 ```
