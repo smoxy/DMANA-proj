@@ -1,0 +1,236 @@
+---
+title: 'Evaluation of KNN classifier with Principal Component Analysis'
+author: "Matteo Fasulo, Simone Flavio Paris, Matteo Sivoccia"
+date: "07/12/2021"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+    number_sections: yes
+    toc_float: yes
+    theme: united
+    highlight: tango
+    code_folding: hide
+  html_notebook:
+    toc: yes
+    toc_depth: 3
+    number_sections: yes
+    toc_float: yes
+    theme: united
+    highlight: tango
+    df_print: paged
+    code_folding: hide
+---
+Packages used:
+
+```{r Pre Processing, message=FALSE, warning=FALSE}
+source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
+loadPackages(c('pacman','ggplot2','sn','corrplot','FactoMineR','factoextra','caret','tidyverse'))
+pacman::p_loaded()
+data(wines)
+```
+
+# Dataset
+Riassunto del dataset:
+
+```{r wines, message=FALSE, warning=FALSE, paged.print=TRUE}
+wines
+```
+
+# Correlation Matrix
+Abbiamo deciso, per prima cosa, di controllare la correlazione tra le variabili attraverso una rappresentazione grafica dove sia l'intensità del colore che il raggio di ogni circonferenza è proporzionale alla correlazione della variabile.
+
+```{r corMatrix, message=FALSE, warning=FALSE}
+corMatrix <- cor(wines[,-1])
+plotCorr <- function(corMatrix){
+  col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+  return(corrplot(corMatrix,
+                  type="upper",
+                  order="FPC",
+                  sig.level = 0.01,
+                  insig = "blank",
+                  title = 'Correlation Plot',
+                  tl.cex = .8,
+                  mar=c(0,0,1,0)))
+}
+plotCorr(corMatrix)
+```
+
+Ci è sembrato opportuno nella nostra analisi considerare anche l'annata del vino ottenuta dalla trasformazione del nome di ogni osservazione.
+
+```{r year, message=FALSE, warning=FALSE, paged.print=TRUE}
+year <- as.numeric(substr(rownames(wines), 6, 7))
+wines[,'year'] <- year
+
+wines %>%
+    count(wine = factor(wine),
+          year = factor(year)) %>%
+    mutate(pct = prop.table(n)) %>% 
+    ggplot(aes(x = year, y = pct, fill = wine, label = scales::percent(pct))) + 
+    geom_col(position = 'stack') + 
+    geom_text(position = position_stack(vjust = 0.5),
+              size = 3) + 
+    scale_y_continuous(name = "Percentage")+
+    scale_x_discrete(name = "Year")+
+    scale_fill_manual(values=c("#CC6666", "#9999CC", "#66CC99"))+
+    theme(legend.position = "bottom")
+```
+
+# PCA
+Utilizzando la Principal Component Analysis abbiamo stimato le componenti principali che descrivono il nostro dataset, con l'aggiunta di 2 variaibli qualitative di supporto:
+
+- Tipo di vino (Barolo, Barbera, Grignolino)
+- Annata del vino
+
+```{r pca, message=FALSE, warning=FALSE, include=FALSE}
+res <- PCA(wines, quanti.sup=NULL, quali.sup=c(1,29))
+```
+
+## Screeplot
+Dallo screeplot è possibile visualizzare la percentuale di varianza spiegata dalle componenti principali. Si noti come solamente le prime 2 costituiscono il 41% della varianza totale.
+
+```{r screeplot, message=FALSE, warning=FALSE}
+fviz_screeplot(res, addlabels = TRUE, ylim = c(0, 26))
+```
+
+Riassunto dell'analisi delle componenti principali:
+
+```{r summaryPCA, message=FALSE, warning=FALSE}
+summary(res, nbelements=10)
+```
+
+## Individuals Plot
+La libreria _*fviz*_ ci ha permesso di rappresentare graficamente gli individui in funzione delle prime due componenti principali. Per semplicità di rappresentazione, vengono mostrati gli individui il cui cos2 è maggiore di 0.6 .
+
+```{r individual, message=FALSE, warning=FALSE}
+fviz_pca_ind(res,
+             col.ind="cos2",
+             geom = c("point","text"),
+             gradient.cols = c("#94bdff","#1b7fcc",'#00062e'),
+             repel=T,
+             select.ind= list(cos2 = .6),
+             ggtheme=theme_minimal())
+```
+
+CONSIDERAZIONI A RIGUARDO
+
+## Variables Plot
+Discorso analogo per quanto riguarda le variabili, selezionando le top 10 per cos2.
+
+```{r variablesPCA, message=FALSE, warning=FALSE}
+fviz_pca_var(res, col.var = "cos2",
+             gradient.cols = c("#94bdff","#1b7fcc",'#00062e'),
+             select.var= list(cos2 = 10),
+             repel = T,
+             ggtheme = theme_minimal())
+```
+
+## BiPlot
+Combinando insieme le due precedenti rappresentazioni:
+
+```{r biplotPCA-1-2, message=FALSE, warning=FALSE}
+fviz_pca_biplot(res, label = "var", habillage=wines$wine,
+                addEllipses=TRUE, ellipse.level=0.90,
+                ggtheme = theme_minimal(),
+                select.var= list(cos2 = 10))
+```
+
+## Ellipses Plot
+Considerando inoltre il fattore annata del vino:
+
+```{r ellipsesPCA-1-2, message=FALSE, warning=FALSE}
+plotellipses(model=res, autoLab = "auto")
+```
+
+## What about 3rd and 4th dimension?
+Per scrupolo, abbiamo controllato anche le componenti principali successive alla prima e seconda dimensione, notando che le osservazioni, sulla terza e quarta dimensione, non sono ben distinguibili.
+
+```{r biplotPCA-3-4, message=FALSE, warning=FALSE}
+fviz_pca_biplot(res, axes=c(3,4), label = "var", habillage=wines$wine,
+                addEllipses=TRUE, ellipse.level=0.90,
+                ggtheme = theme_minimal())
+```                
+
+```{r ellipsesPCA-3-4, message=FALSE, warning=FALSE}
+plotellipses(model=res, axes=c(3,4), autoLab = "auto")
+
+```
+
+# Splitting (using caret)
+Volendo dunque utilizzare le componenti principali come base per una classificazione, abbiamo recuperato gli score per ogni osservazione dalle due dimensioni (DIM1 e DIM2), e diviso il dataset originario in una sezione di training ed una di testing. Lo split è effettuato secondo una proporzione di 0.7:
+
+```{r splitting, message=FALSE, warning=FALSE}
+set.seed(3033)
+intrain <- createDataPartition(y = wines$wine, p=0.7, list = FALSE)
+dim(intrain)
+```
+
+# KNN {.tabset}
+Combinando in un unico dataframe i risultati della prima e della seconda componente principale è stato possibile applicare, tra i tanti metodi di classificazione, il KNN (K Nearest Neighbours) con Cross Validation 10-Fold: 
+
+```{r principal components, message=FALSE, warning=FALSE}
+pc.comp <- res$ind$coord
+pc.comp1 <- pc.comp[,1]
+pc.comp2 <- pc.comp[,2]
+X = cbind(pc.comp1, pc.comp2)
+X = as.data.frame(cbind(wine=wines$wine, X))
+X[which(X$wine==1),1] <- "Barolo"
+X[which(X$wine==2),1] <- "Grignolino"
+X[which(X$wine==3),1] <- "Barbera"
+```
+
+## KNN-PC1 
+```{r knnPC1, message=FALSE, warning=FALSE}
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+set.seed(3333)
+knn_fit <- caret::train(wine ~ .-pc.comp2, data = X[intrain,], method = "knn",
+                 trControl=trctrl,
+                 preProcess = c("center", "scale"),
+                 tuneLength = 10)
+print(knn_fit)
+plot(knn_fit)
+test_pred <- predict(knn_fit, newdata = X[-intrain,])
+confusionMatrix(test_pred, as.factor(X[-intrain,'wine']))
+```
+
+## KNN-PC2 
+```{r knnPC2, message=FALSE, warning=FALSE}
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+set.seed(3333)
+knn_fit <- caret::train(wine ~ .-pc.comp1, data = X[intrain,], method = "knn",
+                 trControl=trctrl,
+                 preProcess = c("center", "scale"),
+                 tuneLength = 10)
+print(knn_fit)
+plot(knn_fit)
+test_pred <- predict(knn_fit, newdata = X[-intrain,])
+confusionMatrix(test_pred, as.factor(X[-intrain,'wine']))
+```
+## KNN-PC1+PC2 
+```{r knnPC1+PC2, message=FALSE, warning=FALSE}
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+set.seed(3333)
+knn_fit <- caret::train(wine ~ ., data = X[intrain,], method = "knn",
+                 trControl=trctrl,
+                 preProcess = c("center", "scale"),
+                 tuneLength = 10)
+print(knn_fit)
+plot(knn_fit)
+test_pred <- predict(knn_fit, newdata = X[-intrain,])
+confusionMatrix(test_pred, as.factor(X[-intrain,'wine']))
+```
+
+## KNN (without PCA)
+```{r knnNoPCA, message=FALSE, warning=FALSE}
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+set.seed(3333)
+knn_fit <- train(wine ~.-year, data = wines[intrain,], method = "knn",
+                 trControl=trctrl,
+                 preProcess = c("center", "scale"),
+                 tuneLength = 10)
+print(knn_fit)
+plot(knn_fit)
+test_pred <- predict(knn_fit, newdata = wines[-intrain,])
+confusionMatrix(test_pred, as.factor(wines[-intrain,1]))
+```
