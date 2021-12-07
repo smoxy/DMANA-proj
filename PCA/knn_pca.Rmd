@@ -126,6 +126,46 @@ fviz_pca_var(res, col.var = "cos2",
              ggtheme = theme_minimal())
 ```
 
+## What's Dim1 and Dim2?
+```{r description of variables, message=FALSE, warning=FALSE, paged.print=TRUE, rows.print=27}
+descDf <- data.frame("Category"=c('Alcohol/fermentation',NA,NA,NA,'Taste',NA,NA,NA,NA,NA,NA,NA,NA,'Mineral content',NA,NA,NA,NA,'Appearance',NA,NA,NA,'Other chemical elements',NA,NA,NA,NA),
+                    "Variable"=c('Alcohol','Proline','Glycerol','Methanol','Phenols','NonFlavanoids','Flavanoids','Sugar','Acidity','Malic','Tartaric','Uronic','Proanthocyanins','Ash','Alcal-Ash','Magnesium','Potassium','Calcium','Hue','Colour','OD_dw','OD_fl','pH','Phosphate','Chloride','Butanediol','Nitrogen'),
+                    "Dim"=c(2,2,NA,NA,1,NA,1,NA,1,NA,NA,1,NA,NA,NA,NA,NA,NA,1,2,1,1,NA,NA,NA,NA,NA))
+data_blank <- descDf
+data_blank <- sapply(data_blank, as.character)
+data_blank[is.na(data_blank)] <- "" 
+as.data.frame(data_blank)
+```
+
+Nel tentativo di spiegare il significato delle componenti principali, abbiamo notato che sulla __dimensione 1__ sono presenti:
+
+- Phenols
+- Flavanoids
+- Acidity
+- Uronic
+- Hue
+- OD_dw
+- OD_fl
+
+Considerando che:
+
+- le prime 4 variabili appartengono alla categoria *taste*
+- *OD_dw* e *OD_fl* sono fortemente correlate a queste variabili nella *Correlation Matrix*
+
+La dimensione 1 rappresenta il __gusto__ e __intensità del sapore__.
+Sulla __dimensione 2__ vi sono principalmente:
+
+- Alcohol
+- Proline
+- Colour
+
+E considerando che:
+
+- Sia *Alcohol* che *Proline* sono misure della categoria di *Alcohol*/*fermentation*
+- *Colour* è correlato positivamente con *Alcohol* nella *Correlation Matrix*
+
+E' ragionevole pensare che la dimensione 2 rappresenti i **livelli di fermentazione** e di **alcol**.
+
 ## BiPlot
 Combinando insieme le due precedenti rappresentazioni:
 
