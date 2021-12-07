@@ -26,7 +26,8 @@ Packages used:
 
 ```{r Pre Processing, message=FALSE, warning=FALSE}
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
-loadPackages(c('pacman','ggplot2','sn','corrplot','FactoMineR','factoextra','caret','tidyverse'))
+loadPackages(c('pacman','ggplot2','sn','corrplot','FactoMineR','factoextra',
+               'caret','tidyverse','rgl'))
 pacman::p_loaded()
 data(wines)
 ```
@@ -137,7 +138,7 @@ data_blank[is.na(data_blank)] <- ""
 as.data.frame(data_blank)
 ```
 
-Nel tentativo di spiegare il significato delle componenti principali, abbiamo notato che sulla __dimensione 1__ sono presenti:
+Abbiamo analizzato quali siano le variabili principali riassunte da ogni variabile sintetica, abbiamo notato alti valori del cos2 per la DIM1 con:
 
 - Phenols
 - Flavanoids
@@ -152,8 +153,10 @@ Considerando che:
 - le prime 4 variabili appartengono alla categoria *taste*
 - *OD_dw* e *OD_fl* sono fortemente correlate a queste variabili nella *Correlation Matrix*
 
-La dimensione 1 rappresenta il __gusto__ e __intensità del sapore__.
-Sulla __dimensione 2__ vi sono principalmente:
+La dimensione 1 rappresenta principalmente l' __intensità del sapore__.
+
+
+Sulla dimensione 2 vi sono principalmente:
 
 - Alcohol
 - Proline
@@ -175,6 +178,21 @@ fviz_pca_biplot(res, label = "var", habillage=wines$wine,
                 ggtheme = theme_minimal(),
                 select.var= list(cos2 = 10))
 ```
+Possiamo notare come la dimensione 1 oppone (divide) in maniera forte i vini Barolo e Barbera.
+
+I Barolo sono caratterizzati da:
+- **Alti valori** di *flavanoids*, *proline*, *phenols*, *OD_dw*, *alcohol*, *hue*. (variabili ordinate in maniera decrescente)
+- **Bassi valori** di *year* (sono quelli più vecchi infatti), *alcal_ash*, *acidity*
+
+I Barbera sono caratterizzati da: (valori diversi in grassetto)
+- **Alti valori** di *acidity*, *year* (sono quelli più recenti infatti), **tartaric**, **malic**, **uronic**, *alcal_ash* e **colour** (variabili ordinate in maniera decrescente)
+- **Bassi valori** di  *OD_dw*,  **OD_fl**, *flavanoids*, *hue*, *phenols*, **roanthocyanins**, *proline*. 
+
+La dimensione 2 divide discretamente i Grignolino dai Barolo e Barbera.
+I Grignolino sono caratterizzati da:
+- **Alti valori** di *OD_fl*, **calcium**, *hue*.
+- **Bassi valori** di  *alcohol*,  *colour*, *ash*, *proline*, **magnesium**, **glycerol**, **sugar**. 
+Notiamo anche che **i Grignolino sono altamente correlati con questa dimensione**, infatti possono riassumere da soli la dimensione 2.
 
 ## Ellipses Plot
 Considerando inoltre il fattore annata del vino:
@@ -291,4 +309,19 @@ ggplot(knn.accuracyData, aes(knn_fit.PC1$results$k)) +
   scale_color_manual(name = "Y series", values = c("PC1" = "#003fa3", "PC2" = "#00a375", "PC1&2" = "#9800a3", "Normal" = "#a3003c")) +
   ggtitle("Comparison between Components") +
   xlab("#Neighbors") + ylab("Accuracy (Repeated Cross Validation)")
+```
+
+# Modellazione 3D
+```{r 3ds, message=FALSE, warning=FALSE}
+# best 3 for separation
+plot3d(wines$flavanoids, wines$OD_dw, wines$proline, type='s', size=2, col=as.numeric(wines$wine))
+# worst 3 for separation
+plot3d(wines$methanol, wines$potassium, wines$pH, type='s', size=2, col=as.numeric(wines$wine))
+```
+
+# Modellazione 3D PCA
+```{r 3ds PCA, message=FALSE, warning=FALSE}
+# Migliori 3 per PCA che spiegano il 50,55% della varianza
+plot3d(pc.comp[,1], pc.comp[,2], pc.comp[,3], type='s', size=2, col=as.numeric(wines$wine))
+pc.comp[,1]
 ```
