@@ -1,17 +1,8 @@
 ---
-title: 'Evaluation of KNN classifier with Principal Component Analysis'
+title: 'Multivariate data analysis: a discriminating method of the origin of wines'
 author: "Matteo Fasulo, Simone Flavio Paris, Matteo Sivoccia"
-date: "07/12/2021"
+date: "23/11/2021"
 output:
-  html_document:
-    toc: yes
-    toc_depth: '3'
-    df_print: paged
-    number_sections: yes
-    toc_float: yes
-    theme: united
-    highlight: tango
-    code_folding: hide
   html_notebook:
     toc: yes
     toc_depth: 3
@@ -21,307 +12,768 @@ output:
     highlight: tango
     df_print: paged
     code_folding: hide
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+    number_sections: yes
+    toc_float: yes
+    theme: united
+    highlight: tango
+    code_folding: hide
 ---
-Packages used:
-
-```{r Pre Processing, message=FALSE, warning=FALSE}
+```{r loadEnv, message=FALSE, warning=FALSE}
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
-loadPackages(c('pacman','ggplot2','sn','corrplot','FactoMineR','factoextra',
-               'caret','tidyverse','rgl'))
-pacman::p_loaded()
-data(wines)
+
+loadPackages(c('sn','tidyverse','psych','RColorBrewer','stargazer','mclust','ContaminatedMixt',
+               'plotly','ggplot2','ggdendro','teigen','tclust','HDMD','caTools','clustvarsel',
+               'vscc','sparcl','pgmm','caret','glmnet','MLmetrics','rgl'))
+
+load("Z:\\DesktopC\\LUMSA\\2\\Data Mining\\Finite Mixture\\FiniteMixtureL31.RData")
+#load("H:\\smoxy\\Downloads\\FiniteMixtureL31.RData")
+rm(CO2data)
+rm(NOdata)
+rm(tonedata)
+type <- wine$Type
+rm(wine)
 ```
+# Introduzione
+Dati su 27 caratteristiche chimico/fisiche di tre diversi tipi di vino (Barolo, Grignolino, Barbera)
+dal Piemonte. Un set di dati con 178 osservazioni e 28 variabili (di cui la prima relativa alla tipologia di vino). Nell'ordine: 
 
-# Dataset
-Riassunto del dataset:
+- Barolo 
+- Grignolino
+- Barbera
 
-```{r wines, message=FALSE, warning=FALSE, paged.print=TRUE}
+```{r dtTable}
+data(wines)
 wines
 ```
 
-# Correlation Matrix
-Abbiamo deciso, per prima cosa, di controllare la correlazione tra le variabili attraverso una rappresentazione grafica dove sia l'intensità del colore che il raggio di ogni circonferenza è proporzionale alla correlazione della variabile.
+## Annata del vino: un fattore da considerare?
+E' stato possibile attraverso la ricerca originaria risalire all'anno di osservazione di ciascun vino. Di seguito vengono riportate le osservazioni dei tre diversi tipi di vino durante gli anni:
 
-```{r corMatrix, message=FALSE, warning=FALSE}
-corMatrix <- cor(wines[,-1])
-plotCorr <- function(corMatrix){
-  col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
-  return(corrplot(corMatrix,
-                  type="upper",
-                  order="FPC",
-                  sig.level = 0.01,
-                  insig = "blank",
-                  title = 'Correlation Plot',
-                  tl.cex = .8,
-                  mar=c(0,0,1,0)))
-}
-plotCorr(corMatrix)
-```
-
-Ci è sembrato opportuno nella nostra analisi considerare anche l'annata del vino ottenuta dalla trasformazione del nome di ogni osservazione.
-
-```{r year, message=FALSE, warning=FALSE, paged.print=TRUE}
+```{r vinoAnni, message=FALSE, warning=FALSE}
 year <- as.numeric(substr(rownames(wines), 6, 7))
-wines[,'year'] <- year
+table(wines$wine, year)
+#wines[,'wine'] <- type
+```
+Notiamo subito che il Barbera è distribuito principalmente negli ultimi anni (76,78,79) mentre il Barolo nel 71, 73 e 74.
+Per quanto riguarda la percentuale delle singole classi:
 
+```{r nClassi, message=FALSE, warning=FALSE}
 wines %>%
-    count(wine = factor(wine),
-          year = factor(year)) %>%
-    mutate(pct = prop.table(n)) %>% 
-    ggplot(aes(x = year, y = pct, fill = wine, label = scales::percent(pct))) + 
-    geom_col(position = 'stack') + 
-    geom_text(position = position_stack(vjust = 0.5),
-              size = 3) + 
-    scale_y_continuous(name = "Percentage")+
-    scale_x_discrete(name = "Year")+
-    scale_fill_manual(values=c("#CC6666", "#9999CC", "#66CC99"))+
-    theme(legend.position = "bottom")
+  count(wine = factor(wine)) %>%
+  mutate(pct = prop.table(n)) %>% 
+  ggplot(aes(x = wine, y = pct, fill = wine, label = scales::percent(pct))) + 
+  geom_col(position = 'dodge') + 
+  geom_text(position = position_dodge(width = .9),
+            vjust = -0.5, 
+            size = 3) + 
+  scale_y_continuous(name = "Percentage")+
+  scale_x_discrete(name = "Wine Name")+
+  scale_fill_hue(l=40, c=35)+
+  theme(legend.position = "none")
+```
+E' chiaro che il Grignolino sia il più numeroso (39.9%) seguito dal Barolo (33.1%) e dal Barbera (27.0%).
+
+Per rappresentare la dispersione dei dati abbiamo usato uno scatterplot leggermente differente dal solito. Sulla diagonale superiore si vede la distribuzione dei dati mentre sulla diagonale inferiore vi è la _correlazione di Pearson_ tra le variabili.
+
+```{r scatterPlot, message=FALSE, warning=FALSE}
+my_cols <- c("#00AFBB", "#E7B800", "#FC4E07") 
+panel.cor <- function(x, y){
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- round(cor(x, y), digits=2)
+    txt <- paste0("R = ", r)
+    text(0.5, 0.5, txt, cex = 1)
+}
+upper.panel<-function(x, y){
+  points(x,y, pch = 19, col = my_cols[wines$wine],cex=.5)
+}
+pairs(wines[,2:8], 
+      lower.panel = panel.cor,
+      upper.panel = upper.panel)
+```
+Dalle prime 7 variabili, è possibile notare una correlazione di 0.69 tra *acidity* e *malic* e ovviamente una relazione inversamente proporzionale tra *pH* e *acidity*.
+
+# Statistiche descrittive
+Per visualizzare le statistiche descrittive (media e deviazione standard) ci è sembrato opportuno dividerle in base alla classe di appartenenza:
+```{r descriptive, message=FALSE, warning=FALSE}
+printMeanAndSdByGroup <- function(variables,groupvariable)
+  {
+     variablenames <- c(names(groupvariable),names(as.data.frame(variables)))
+     groupvariable <- groupvariable[,1]
+     means <- aggregate(as.matrix(variables) ~ groupvariable, FUN = mean)
+     names(means) <- variablenames
+     print(paste("Means:"))
+     print(means)
+     sds <- aggregate(as.matrix(variables) ~ groupvariable, FUN = sd)
+     names(sds) <- variablenames
+     print(paste("Standard deviations:"))
+     print(sds)
+}
+printMeanAndSdByGroup(wines[2:28],wines[1])
+```
+Alcune considerazioni:
+
+- La media di sugar, potassium, magnesium, phosphate, chloride, flavanoids, proanthocyanins, colour nel Barolo è più alta.
+- La media di acidity, tartaric, malic, uronic, alcal_ash nel Barbera è più alta.
+- La deviazione standard di acidity è più alta nel Grignolino. 
+
+## Varianza Within
+Abbiamo calcolato la varianza within tra una feature e i tipi di vino:
+```{r withinVariance, message=FALSE, warning=FALSE}
+calcWithinGroupsVariance <- function(variable,groupvariable)
+  {
+     groupvariable2 <- as.factor(groupvariable[[1]])
+     levels <- levels(groupvariable2)
+     numlevels <- length(levels)
+     numtotal <- 0
+     denomtotal <- 0
+     for (i in 1:numlevels)
+     {
+        leveli <- levels[i]
+        levelidata <- variable[groupvariable==leveli,]
+        levelilength <- length(levelidata)
+        sdi <- sd(levelidata)
+        numi <- (levelilength - 1)*(sdi * sdi)
+        denomi <- levelilength
+        numtotal <- numtotal + numi
+        denomtotal <- denomtotal + denomi
+     }
+     Vw <- numtotal / (denomtotal - numlevels)
+     return(Vw)
+}
+calcWithinGroupsVariance(wines["flavanoids"],wines[1])
+```
+## Varianza Between
+Stesso discorso per la varianza between tra una feature e i vini: 
+```{r betweenVariance, message=FALSE, warning=FALSE}
+calcBetweenGroupsVariance <- function(variable,groupvariable)
+  {
+     groupvariable2 <- as.factor(groupvariable[[1]])
+     levels <- levels(groupvariable2)
+     numlevels <- length(levels)
+     grandmean <- sapply(variable,mean)
+     numtotal <- 0
+     denomtotal <- 0
+     for (i in 1:numlevels)
+     {
+        leveli <- levels[i]
+        levelidata <- variable[groupvariable==leveli,]
+        levelilength <- length(levelidata)
+        meani <- mean(levelidata)
+        sdi <- sd(levelidata)
+        numi <- levelilength * ((meani - grandmean)^2)
+        denomi <- levelilength
+        numtotal <- numtotal + numi
+        denomtotal <- denomtotal + denomi
+     }
+     Vb <- numtotal / (numlevels - 1)
+     Vb <- Vb[[1]]
+     return(Vb)
+}
+calcBetweenGroupsVariance(wines["flavanoids"],wines[1])
+```
+## Separazione
+Per vedere quali variabili hanno la maggiore separazione, (rapporto tra Varianza Between e Varianza Within) abbiamo scritto una funzione apposita per calcolarne il valore per ogni feature.
+```{r separation, message=FALSE, warning=FALSE}
+calcSeparations <- function(variables,groupvariable)
+  {
+     variables <- as.data.frame(variables)
+     numvariables <- length(variables)
+     variablenames <- colnames(variables)
+     Vw <- NULL
+     Vb <- NULL
+     sep <- NULL
+     for (i in 1:numvariables)
+     {
+        variablei <- variables[i]
+        variablename <- variablenames[i]
+        Vw[i] <- calcWithinGroupsVariance(variablei, groupvariable)
+        Vb[i] <- calcBetweenGroupsVariance(variablei, groupvariable)
+        sep[i] <- Vb[i]/Vw[i]
+     }
+     result <- data.frame('Within'=Vw,'Between'=Vb,'Sep'=sep, row.names = as.vector(colnames(wines[,-1])), stringsAsFactors = F)
+     result[order(result$Sep,decreasing = T),]
+}
+calcSeparations(wines[2:28],wines[1])
+```
+# Splitting in Train e Test
+Per alcune analisi successive, abbiamo provato a cambiare il task della ricerca tentando di utilizzare un modello come classificatore e di misurarne le prestazioni di classificazione. A tale scopo, abbiamo suddiviso il dataset originario in due sottogruppi: 
+
+- train
+- test
+```{r splitTrainTest, message=FALSE, warning=FALSE}
+require(caTools)
+sample = sample.split(wines[,1], SplitRatio = .50)
+
+train = subset(wines, sample == TRUE)
+trainTestNames <- train$wine
+print(paste("Train Obs:",nrow(train)))
+#train$wine <- as.numeric(train$wine)
+
+test  = subset(wines, sample == FALSE)
+wineTestNames <- test$wine
+print(paste("Test Obs:",nrow(test)))
+#test$wine <- as.numeric(test$wine)
+```
+# Clustering
+Per il Clustering abbiamo deciso di applicare: 
+
+- Un approccio **Distance-Based**:
+  - Gerarchico:
+    - Euclidean, Minkowski, Manhattan, Mahalanobis
+  - Di partizionamento:
+    - KMeans
+    - PAM
+- Un approccio **Model-Based**:
+  - Gaussian Mixture (Mclust)
+  - Contaminated Normal (CNmixt)
+  - Multivariate t Distribution (teigen)
+  - Parsimonious Gaussian Mixture Models (pgmm)
+
+
+## Distance-Based
+```{r distance, message=FALSE, warning=FALSE}
+dissMatrix <- pairwise.mahalanobis(wines[,-1],
+                                      grouping = c(1:nrow(wines)),
+                                      cov = cov(wines[,-1]))$distance
+dissMatrix <- sqrt(dissMatrix)
+dissMatrix <- as.dist(dissMatrix)
+combDist <- function(distance, methods, df, dt, dissMatrix) {
+  c <- 0
+  results <- list()
+  for (i in 1:length(distance)){
+    ifelse(distance[i] == "minkowski",
+           dist <- dist(df, method = distance[i], p = 4),
+           ifelse(distance[i] == "mahalanobis",
+                  dist <- dissMatrix,
+                  dist <- dist(df, method = distance[i])))
+    for (j in 1:length(methods)){
+      dendo = hclust(dist, method = methods[j])
+      dendo.x = ggdendrogram(dendo, rotate = F, size = 2, leaf_labels = T, labels = F) + 
+                               ggtitle(paste(distance[i],' ',methods[j],sep=''))
+      for(elem in 2:4){
+        cluster = cutree(dendo, k=elem)
+        c <- c + 1
+        results[[c]] <- list(distance = distance[i],
+                             method = methods[j],
+                             groups = elem,
+                             table = table(dt,cluster),
+                             dendo = dendo.x,
+                             AdjustedRandIndex = adjustedRandIndex(dt,cluster),
+                             cluster = cluster)
+      }
+    }
+  }
+  return(results)
+}
+results <- combDist(c("euclidean", "manhattan", "minkowski","mahalanobis"),
+                    c("single", "complete", "average", "ward.D"), scale(wines[,-1]), wines[,1], dissMatrix)
+
+optimal <- function(results){
+  best_randIndex.eu = 0
+  best_randIndex.ma = 0
+  best_randIndex.mi = 0
+  best_randIndex.maha = 0
+  best_model.eu = integer()
+  best_model.ma = integer()
+  best_model.mi = integer()
+  best_model.maha = integer()
+  for (i in 1:length(results)){
+    current_randIndex = results[[i]]$AdjustedRandIndex
+    if (results[[i]]$distance == "euclidean"){
+      if (current_randIndex > best_randIndex.eu) {
+        best_randIndex.eu = current_randIndex
+        best_model.eu = i
+      }
+    }
+    else if (results[[i]]$distance == "manhattan"){
+      if (current_randIndex > best_randIndex.ma) {
+        best_randIndex.ma = current_randIndex
+        best_model.ma = i
+      }
+    }
+    else if (results[[i]]$distance == "minkowski"){
+      if (current_randIndex > best_randIndex.mi) {
+        best_randIndex.mi = current_randIndex
+        best_model.mi = i
+      }
+    }
+    else if (results[[i]]$distance == "mahalanobis"){
+      if (current_randIndex > best_randIndex.maha) {
+        best_randIndex.maha = current_randIndex
+        best_model.maha = i
+      }
+    }
+  }
+  #print(list(euclidean = list(model.number = best_model.eu,
+  #                            cluster = results[[best_model.eu]]$groups,
+  #                            AdjustedRandIndex = best_randIndex.eu),
+  #           manhattan = list(model.number = best_model.ma,
+  #                            cluster = results[[best_model.ma]]$groups,
+  #                            AdjustedRandIndex = best_randIndex.ma),
+  #           minkowski = list(model.number = best_model.mi,
+  #                            cluster = results[[best_model.mi]]$groups,
+  #                            AdjustedRandIndex = best_randIndex.mi),
+  #           mahalanobis=list(model.number = best_model.maha,
+  #                            cluster = results[[best_model.maha]]$groups,
+  #                            AdjustedRandIndex = best_randIndex.maha))
+  #    )
+  return(list(euclidean = results[[best_model.eu]],
+              manhattan = results[[best_model.ma]],
+              minkowski = results[[best_model.mi]],
+              mahalanobis=results[[best_model.maha]]))
+}
+best_dist_model = optimal(results)
+```
+### Dendrogrammi {.tabset}
+
+#### Euclidean
+```{r euclidean, message=FALSE, warning=FALSE}
+ggplotly(best_dist_model$euclidean$dendo)
+print(best_dist_model$euclidean$table)
+print(paste("AdjustedRandIndex:",round(best_dist_model$euclidean$AdjustedRandIndex,3)))
+```
+#### Manhattan
+```{r manhattan, message=FALSE, warning=FALSE}
+ggplotly(best_dist_model$manhattan$dendo)
+print(best_dist_model$manhattan$table)
+print(paste("AdjustedRandIndex:",round(best_dist_model$manhattan$AdjustedRandIndex,3)))
+```
+#### Minkowski
+```{r minkowski, message=FALSE, warning=FALSE}
+ggplotly(best_dist_model$minkowski$dendo)
+print(best_dist_model$minkowski$table)
+print(paste("AdjustedRandIndex:",round(best_dist_model$minkowski$AdjustedRandIndex,3)))
+```
+#### Mahalanobis
+```{r mahalanobis, message=FALSE, warning=FALSE}
+ggplotly(best_dist_model$mahalanobis$dendo)
+print(best_dist_model$mahalanobis$table)
+print(paste("AdjustedRandIndex:",round(best_dist_model$mahalanobis$AdjustedRandIndex,3)))
 ```
 
-# PCA
-Utilizzando la Principal Component Analysis abbiamo stimato le componenti principali che descrivono il nostro dataset, con l'aggiunta di 2 variaibli qualitative di supporto:
-
-- Tipo di vino (Barolo, Barbera, Grignolino)
-- Annata del vino
-
-```{r pca, message=FALSE, warning=FALSE, include=FALSE}
-res <- PCA(wines, quanti.sup=NULL, quali.sup=c(1,29))
+### K-Means e PAM {.tabset}
+#### KMeans 3
+```{r kmeans3, message=FALSE, warning=FALSE}
+require(cluster)
+k.means.3 <- kmeans(scale(wines[,-1]),centers=3,nstart = 50, iter.max = 100)
+table(wines[,1], k.means.3$cluster)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(k.means.3$cluster, wines[,1]),3)))
+```
+#### KMeans 4
+```{r kmeans4, message=FALSE, warning=FALSE}
+require(cluster)
+k.means.4 <- kmeans(scale(wines[,-1]),centers=4,nstart = 50, iter.max = 100)
+table(wines[,1], k.means.4$cluster)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(k.means.4$cluster, wines[,1]),3)))
+```
+#### PAM 3
+```{r pam3, message=FALSE, warning=FALSE}
+require(cluster)
+PAM.3 <- pam(wines[,-1], k=3,
+    metric = "euclidean", 
+    nstart = 50,
+    stand = TRUE)
+table(wines[,1], PAM.3$clustering)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(PAM.3$clustering, wines[,1]),3)))
+```
+#### PAM 4
+```{r pam4, message=FALSE, warning=FALSE}
+require(cluster)
+PAM.4 <- pam(wines[,-1], k=4,
+    metric = "euclidean", 
+    nstart = 50,
+    stand = TRUE)
+table(wines[,1], PAM.4$clustering)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(PAM.4$clustering, wines[,1]),3)))
 ```
 
-## Screeplot
-Dallo screeplot è possibile visualizzare la percentuale di varianza spiegata dalle componenti principali. Si noti come solamente le prime 2 costituiscono il 41% della varianza totale.
+# Variable Selection 
 
-```{r screeplot, message=FALSE, warning=FALSE}
-fviz_screeplot(res, addlabels = TRUE, ylim = c(0, 26))
+## Principio filosofico {.tabset}
+_Novacula Occami: frustra fit per plura quod potest fieri per pauciora_ (Il rasoio di Occam: è futile fare con più mezzi ciò che si può fare con meno). Tale principio metodologico è ritenuto alla base del pensiero scientifico moderno.
+
+### Headlong
+```{r headlong, echo=FALSE, message=FALSE, warning=FALSE}
+subset.headlong <- clustvarsel(wines[,-1],G=3:4, search = 'headlong', direction = 'forward', parallel = T, verbose = F)
+
+headlong.selected <- subset.headlong$model
+table(wines[,1],headlong.selected$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(headlong.selected$classification, wines[,1]),3)))
+```
+### Greedy
+```{r Greedy, echo=FALSE, message=FALSE, warning=FALSE}
+subset.greedy <- clustvarsel(wines[,-1],G=3:4, search = 'greedy', direction = 'forward', parallel = T, verbose = F)
+
+greedy.selected <- subset.greedy$model
+table(wines[,1],greedy.selected$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(greedy.selected$classification, wines[,1]),3)))
+```
+### VSCC
+```{r VSCC, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+vscc.mclust <- vscc(wines[,-1], G=3:4, automate = "mclust", initial = NULL, train = NULL, forcereduction = T)
 ```
 
-Riassunto dell'analisi delle componenti principali:
+```{r VSCCRESULT, message=FALSE, warning=FALSE}
+table(wines[,1], vscc.mclust$initialrun$classification) #Clustering results on full data set
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(vscc.mclust$initialrun$classification, wines[,1]),3)))
+table(wines[,1], vscc.mclust$bestmodel$classification) #Clustering results on reduced data set
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(vscc.mclust$bestmodel$classification, wines[,1]),3)))
+```
+### KMeansSparse 3
+```{r kmsparse3, echo=FALSE, message=FALSE, warning=FALSE}
+km.perm.3 <- KMeansSparseCluster.permute(wines[,-1],K=3,wbounds=seq(3,7,len=15),nperms=50,silent = T)
 
-```{r summaryPCA, message=FALSE, warning=FALSE}
-summary(res, nbelements=10)
+km.sparse.3 <- KMeansSparseCluster(wines[,-1],K=3,wbounds=km.perm.3$bestw,nstart = 50, silent = T, maxiter=100)
+table(wines[,1],km.sparse.3[[1]]$Cs)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(km.sparse.3[[1]]$Cs, wines[,1]),3)))
+```
+### KMeansSparse 4
+```{r kmsparse4, echo=FALSE, message=FALSE, warning=FALSE}
+km.perm.4 <- KMeansSparseCluster.permute(wines[,-1],K=4,wbounds=seq(3,7,len=15),nperms=50,silent = T)
+
+km.sparse.4 <- KMeansSparseCluster(wines[,-1],K=4,wbounds=km.perm.4$bestw,nstart = 50, silent = T, maxiter=100)
+table(wines[,1],km.sparse.4[[1]]$Cs)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(km.sparse.4[[1]]$Cs, wines[,1]),3)))
+```
+Le variabili selezionate dalla funzione *clustervarsel* sono:
+
+- flavanoids, OD_dw, proline, colour, uronic, malic, chloride
+
+Le variabili selezionate dalla funzione *vscc* sono:
+
+- flavanoids, OD_dw, proline, colour, alcohol, OD_fl, hue, phenols, uronic, tartaric
+
+
+## Model-Based {.tabset}
+
+### Mclust
+```{r Normal_Mixture, message=FALSE, warOD_dwning=FALSE}
+selectedWines <- wines[,c('flavanoids','OD_dw','proline','colour','alcohol','OD_fl','hue','phenols','uronic','tartaric')]
+
+mixt.selected.wines <- Mclust(selectedWines,G=3:8, verbose = F)
+
+table(wines[,1],mixt.selected.wines$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],mixt.selected.wines$classification),3)))
+
+#summary(mixt.selected.wines)
+#plot.Mclust(mixt.selected.wines, what = 'classification', addEllipses = TRUE)
+
+#mixt.wines <- Mclust(wines[,-1],G=3:8, verbose = F)
+#table(wines[,1],mixt.wines$classification)
+#print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],mixt.wines$classification),3)))
 ```
 
-## Individuals Plot
-La libreria _*fviz*_ ci ha permesso di rappresentare graficamente gli individui in funzione delle prime due componenti principali. Per semplicità di rappresentazione, vengono mostrati gli individui il cui cos2 è maggiore di 0.6 .
-
-```{r individual, message=FALSE, warning=FALSE}
-fviz_pca_ind(res,
-             col.ind="cos2",
-             geom = c("point","text"),
-             gradient.cols = c("#94bdff","#1b7fcc",'#00062e'),
-             repel=T,
-             select.ind= list(cos2 = .6),
-             ggtheme=theme_minimal())
+### CNmixt
+```{r contaminated1, message=FALSE, warning=FALSE}
+cn.wines.mixt <- CNmixt(selectedWines, G = 3, initialization = "mixt", seed = 1234, parallel = F, verbose = F)
+table(wines[,1],getBestModel(cn.wines.mixt, criterion = 'ICL')$models[[1]]$group)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],getBestModel(cn.wines.mixt, criterion = 'ICL')$models[[1]]$group),3)))
 ```
 
-CONSIDERAZIONI A RIGUARDO
-
-## Variables Plot
-Discorso analogo per quanto riguarda le variabili, selezionando le top 10 per cos2.
-
-```{r variablesPCA, message=FALSE, warning=FALSE}
-fviz_pca_var(res, col.var = "cos2",
-             gradient.cols = c("#94bdff","#1b7fcc",'#00062e'),
-             select.var= list(cos2 = 10),
-             repel = T,
-             ggtheme = theme_minimal())
+### CNmixt kmeans
+```{r contaminated2, message=FALSE, warning=FALSE}
+cn.wines.kmeans <- CNmixt(selectedWines, G = 3, initialization = "kmeans", seed = 1234, parallel = F, verbose = F)
+table(wines[,1],getBestModel(cn.wines.kmeans, criterion = 'ICL')$models[[1]]$group)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],getBestModel(cn.wines.kmeans, criterion = 'ICL')$models[[1]]$group),3)))
+```
+### CNmixt rpost
+```{r contaminated3, message=FALSE, warning=FALSE}
+cn.wines.rpost <- CNmixt(selectedWines, G = 3, initialization = "random.post", seed = 1234, parallel = F, verbose = F)
+table(wines[,1],getBestModel(cn.wines.rpost, criterion = 'ICL')$models[[1]]$group)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],getBestModel(cn.wines.rpost, criterion = 'ICL')$models[[1]]$group),3)))
 ```
 
-## What's Dim1 and Dim2?
-```{r description of variables, message=FALSE, warning=FALSE, paged.print=TRUE, rows.print=27}
-descDf <- data.frame("Category"=c('Alcohol/fermentation',NA,NA,NA,'Taste',NA,NA,NA,NA,NA,NA,NA,NA,'Mineral content',NA,NA,NA,NA,'Appearance',NA,NA,NA,'Other chemical elements',NA,NA,NA,NA),
-                    "Variable"=c('Alcohol','Proline','Glycerol','Methanol','Phenols','NonFlavanoids','Flavanoids','Sugar','Acidity','Malic','Tartaric','Uronic','Proanthocyanins','Ash','Alcal-Ash','Magnesium','Potassium','Calcium','Hue','Colour','OD_dw','OD_fl','pH','Phosphate','Chloride','Butanediol','Nitrogen'),
-                    "Dim"=c(2,2,NA,NA,1,NA,1,NA,1,NA,NA,1,NA,NA,NA,NA,NA,NA,1,2,1,1,NA,NA,NA,NA,NA))
-data_blank <- descDf
-data_blank <- sapply(data_blank, as.character)
-data_blank[is.na(data_blank)] <- "" 
-as.data.frame(data_blank)
+### CNmixt rclass
+```{r contaminated4, message=FALSE, warning=FALSE}
+cn.wines.rclass <- CNmixt(selectedWines, G = 3, initialization = "random.clas", seed = 1234, parallel = F, verbose = F)
+table(wines[,1],getBestModel(cn.wines.rclass, criterion = 'ICL')$models[[1]]$group)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],getBestModel(cn.wines.rclass, criterion = 'ICL')$models[[1]]$group),3)))
 ```
 
-Abbiamo analizzato quali siano le variabili principali riassunte da ogni variabile sintetica, abbiamo notato alti valori del cos2 per la DIM1 con:
+## Multivariate t Distribution {.tabset}
 
-- Phenols
-- Flavanoids
-- Acidity
-- Uronic
-- Hue
-- OD_dw
-- OD_fl
-
-Considerando che:
-
-- le prime 4 variabili appartengono alla categoria *taste*
-- *OD_dw* e *OD_fl* sono fortemente correlate a queste variabili nella *Correlation Matrix*
-
-La dimensione 1 rappresenta principalmente l' __intensità del sapore__.
-
-
-Sulla dimensione 2 vi sono principalmente:
-
-- Alcohol
-- Proline
-- Colour
-
-E considerando che:
-
-- Sia *Alcohol* che *Proline* sono misure della categoria di *Alcohol*/*fermentation*
-- *Colour* è correlato positivamente con *Alcohol* nella *Correlation Matrix*
-
-E' ragionevole pensare che la dimensione 2 rappresenti i **livelli di fermentazione** e di **alcol**.
-
-## BiPlot
-Combinando insieme le due precedenti rappresentazioni:
-
-```{r biplotPCA-1-2, message=FALSE, warning=FALSE}
-fviz_pca_biplot(res, label = "var", habillage=wines$wine,
-                addEllipses=TRUE, ellipse.level=0.90,
-                ggtheme = theme_minimal(),
-                select.var= list(cos2 = 10))
+### teigen kmeans
+```{r teigen, message=FALSE, warning=FALSE}
+teigen.kmeans <- teigen(selectedWines, Gs=3:4, init = 'kmeans', scale = T, verbose = F)
+table(wines[,1],teigen.kmeans$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],teigen.kmeans$classification),3)))
 ```
-Possiamo notare come la dimensione 1 oppone (divide) in maniera forte i vini Barolo e Barbera.
-
-I Barolo sono caratterizzati da:
-- **Alti valori** di *flavanoids*, *proline*, *phenols*, *OD_dw*, *alcohol*, *hue*. (variabili ordinate in maniera decrescente)
-- **Bassi valori** di *year* (sono quelli più vecchi infatti), *alcal_ash*, *acidity*
-
-I Barbera sono caratterizzati da: (valori diversi in grassetto)
-- **Alti valori** di *acidity*, *year* (sono quelli più recenti infatti), **tartaric**, **malic**, **uronic**, *alcal_ash* e **colour** (variabili ordinate in maniera decrescente)
-- **Bassi valori** di  *OD_dw*,  **OD_fl**, *flavanoids*, *hue*, *phenols*, **roanthocyanins**, *proline*. 
-
-La dimensione 2 divide discretamente i Grignolino dai Barolo e Barbera.
-I Grignolino sono caratterizzati da:
-- **Alti valori** di *OD_fl*, **calcium**, *hue*.
-- **Bassi valori** di  *alcohol*,  *colour*, *ash*, *proline*, **magnesium**, **glycerol**, **sugar**. 
-Notiamo anche che **i Grignolino sono altamente correlati con questa dimensione**, infatti possono riassumere da soli la dimensione 2.
-
-## Ellipses Plot
-Considerando inoltre il fattore annata del vino:
-
-```{r ellipsesPCA-1-2, message=FALSE, warning=FALSE}
-plotellipses(model=res, autoLab = "auto")
+### teigen hard
+```{r teigen hard, message=FALSE, warning=FALSE}
+teigen.hard <- teigen(selectedWines, Gs=3:4, init = 'hard', scale = T, verbose = F)
+table(wines[,1],teigen.hard$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],teigen.hard$classification),3)))
 ```
 
-## What about 3rd and 4th dimension?
-Per scrupolo, abbiamo controllato anche le componenti principali successive alla prima e seconda dimensione, notando che le osservazioni, sulla terza e quarta dimensione, non sono ben distinguibili.
-
-```{r biplotPCA-3-4, message=FALSE, warning=FALSE}
-fviz_pca_biplot(res, axes=c(3,4), label = "var", habillage=wines$wine,
-                addEllipses=TRUE, ellipse.level=0.90,
-                ggtheme = theme_minimal())
-```                
-
-```{r ellipsesPCA-3-4, message=FALSE, warning=FALSE}
-plotellipses(model=res, axes=c(3,4), autoLab = "auto")
-
+### teigen soft
+```{r teigen soft, message=FALSE, warning=FALSE}
+teigen.soft <- teigen(selectedWines, Gs=3:4, init = 'soft', scale = T, verbose = F)
+table(wines[,1],teigen.soft$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(wines[,1],teigen.soft$classification),3)))
 ```
 
-# Splitting (using caret)
-Volendo dunque utilizzare le componenti principali come base per una classificazione, abbiamo recuperato gli score per ogni osservazione dalle due dimensioni (DIM1 e DIM2), e diviso il dataset originario in una sezione di training ed una di testing. Lo split è effettuato secondo una proporzione di 0.7:
+### t-classifier kmeans
+```{r teigen kmeans, message=FALSE, warning=FALSE}
+teigen.classifier.kmeans <- teigen(train[,-1], Gs=3:4, init = 'kmeans', scale = T, known = train[,1], verbose = F)
+teigen.pre.kmeans = predict(teigen.classifier.kmeans,newdata=test[,-1])
 
-```{r splitting, message=FALSE, warning=FALSE}
-set.seed(3033)
-intrain <- createDataPartition(y = wines$wine, p=0.7, list = FALSE)
-dim(intrain)
+table(test[,1],teigen.pre.kmeans$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(test[,1],teigen.pre.kmeans$classification),3)))
 ```
 
-# KNN {.tabset}
-Combinando in un unico dataframe i risultati della prima e della seconda componente principale è stato possibile applicare, tra i tanti metodi di classificazione, il KNN (K Nearest Neighbours) con Cross Validation 10-Fold: 
+### t-classifier uniform
+```{r teigen uniform, message=FALSE, warning=FALSE}
+teigen.classifier.uniform <- teigen(train[,-1], Gs=3:4, init = 'uniform', scale = T, known = train[,1], verbose = F)
+teigen.pre.uniform = predict(teigen.classifier.uniform,test[,-1])
 
-```{r principal components, message=FALSE, warning=FALSE}
-pc.comp <- res$ind$coord
-pc.comp1 <- pc.comp[,1]
-pc.comp2 <- pc.comp[,2]
-X = cbind(pc.comp1, pc.comp2)
-X = as.data.frame(cbind(wine=wines$wine, X))
-X[which(X$wine==1),1] <- "Barolo"
-X[which(X$wine==2),1] <- "Grignolino"
-X[which(X$wine==3),1] <- "Barbera"
+table(test[,1],teigen.pre.uniform$classification)
+print(paste("AdjustedRandIndex:",round(adjustedRandIndex(test[,1],teigen.pre.uniform$classification),3)))
 ```
 
-## KNN-PC1 
-```{r knnPC1, message=FALSE, warning=FALSE}
-trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
-set.seed(3333)
-knn_fit.PC1 <- caret::train(wine ~ .-pc.comp2, data = X[intrain,], method = "knn",
-                 trControl=trctrl,
-                 preProcess = c("center", "scale"),
-                 tuneLength = 10)
-print(knn_fit.PC1)
-plot(knn_fit.PC1)
-test_pred <- predict(knn_fit.PC1, newdata = X[-intrain,])
-confusionMatrix(test_pred, as.factor(X[-intrain,'wine']))
+# Tecniche di regolarizzazione
+Per la nostra analisi abbiamo voluto verificare l'efficienza di tre noti modelli di regolarizzazione attraverso il pacchetto *caret*:
+
+- Ridge
+- Lasso
+- Elastic Net
+
+```{r lambdaTuning, message=FALSE, warning=FALSE}
+lambda <- 10^seq(0, -2, length = 250)
 ```
 
-## KNN-PC2 
-```{r knnPC2, message=FALSE, warning=FALSE}
-trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
-set.seed(3333)
-knn_fit.PC2 <- caret::train(wine ~ .-pc.comp1, data = X[intrain,], method = "knn",
-                 trControl=trctrl,
-                 preProcess = c("center", "scale"),
-                 tuneLength = 10)
-print(knn_fit.PC2)
-plot(knn_fit.PC2)
-test_pred <- predict(knn_fit.PC2, newdata = X[-intrain,])
-confusionMatrix(test_pred, as.factor(X[-intrain,'wine']))
-```
-## KNN-PC1+PC2 
-```{r knnPC1+PC2, message=FALSE, warning=FALSE}
-trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
-set.seed(3333)
-knn_fit.PC12 <- caret::train(wine ~ ., data = X[intrain,], method = "knn",
-                 trControl=trctrl,
-                 preProcess = c("center", "scale"),
-                 tuneLength = 10)
-print(knn_fit.PC12)
-plot(knn_fit.PC12)
-test_pred <- predict(knn_fit.PC12, newdata = X[-intrain,])
-confusionMatrix(test_pred, as.factor(X[-intrain,'wine']))
-```
+## Ridge
+Il modello *Ridge* riduce i coefficienti, in modo che le variabili, con un contributo minore al risultato, abbiano i loro coefficienti vicini allo zero. Invece di forzarli a essere esattamente zero (come nel *Lasso*), li penalizziamo con un termine chiamato *norma L2* costringendoli così a essere piccoli. In questo modo diminuiamo la complessità del modello senza eliminare nessuna variabile attraverso una costante chiamata lambda ($\lambda$) di penalizzazione:
+$$
+L_{ridge}(\hat{\beta}) = \sum_{i = 1}^{n}{(y_i - x_i\hat{\beta})^2} + \lambda\sum_{k = 1}^{K}{\hat{\beta}_k^2}
+$$
 
-## KNN (without PCA)
-```{r knnNoPCA, message=FALSE, warning=FALSE}
-trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
-set.seed(3333)
-knn_fit <- train(wine ~.-year, data = wines[intrain,], method = "knn",
-                 trControl=trctrl,
-                 preProcess = c("center", "scale"),
-                 tuneLength = 10)
-print(knn_fit)
-plot(knn_fit)
-
-test_pred <- predict(knn_fit, newdata = wines[-intrain,])
-confusionMatrix(test_pred, as.factor(wines[-intrain,1]))
+```{r caretRidge, message=FALSE, warning=FALSE}
+# Build the model
+set.seed(123)
+ridge <- caret::train(
+  x = train[,-1],
+  y = factor(train[,1]),
+  method = "glmnet",
+  trControl = trainControl("cv", number = 10, classProbs = TRUE, summaryFunction = multiClassSummary),
+  tuneGrid = expand.grid(alpha = 0, lambda=lambda),
+  metric="Accuracy")
+# Model coefficients
+coef(ridge$finalModel, ridge$bestTune$lambda)
+# Make predictions
+predictions.ridge <- ridge %>% predict(test)
+# Model prediction performance
+tibble(
+  trueValue = wineTestNames,
+  predictedValue = predictions.ridge)
+```
+Il ridge è composto dalla somma dei residui quadrati più una penalità, definita dalla lettera Lambda, che è moltiplicata per la somma dei coefficienti quadrati $\beta$. Quando $\lambda = 0$, il termine di penalità non ha alcun effetto e il ridge produrrà i coefficienti minimi quadrati classici. Tuttavia, quando $\lambda$ aumenta all’infinito, l’impatto della penalità aumenta e i coefficienti si avvicinano allo zero. Il ridge è particolarmente indicato quando si hanno molti dati multivariati con numero di feature maggiore del numero di osservazioni. Lo svantaggio, però, è che includerà tutti le feature nel modello finale, a differenza dei metodi di feature selection, che generalmente selezioneranno un insieme ridotto di variabili tra quelle disponibili.
+```{r ridgeResult}
+caret::confusionMatrix(predictions.ridge, test$wine)
 ```
 
-## KNN comparison
-```{r knn Comparison, message=FALSE, warning=FALSE}
-knn.accuracyData = as.data.frame(cbind(PC1 = knn_fit.PC1$results$Accuracy,
-                                       PC2 = knn_fit.PC2$results$Accuracy,
-                                       PC12= knn_fit.PC12$results$Accuracy,
-                                       NO_PCA = knn_fit$results$Accuracy))
+## Lasso
+Il *Least Absolute Shrinkage and Selection Operator* (LASSO) riduce i coefficienti verso lo zero penalizzando il modello con un termine di penalità chiamato *norma L1*, che è la somma dei coefficienti in valore assoluto:
+$$
+L_{lasso}(\hat{\beta}) = \sum_{i = 1}^{n}{(y_i - x_i\hat{\beta})^2} + \lambda\sum_{k = 1}^{K}{|\hat{\beta}_k|}
+$$
+```{r caretLasso, message=FALSE, warning=FALSE}
+# Build the model
+set.seed(123)
+lasso <- caret::train(
+  x = train[,-1],
+  y = factor(train[,1]),
+  method = "glmnet",
+  trControl = trainControl("cv", number = 10, classProbs = TRUE, summaryFunction = multiClassSummary),
+  tuneGrid = expand.grid(alpha = 1, lambda=lambda),
+  metric="Accuracy")
+# Model coefficients
+coef(lasso$finalModel, lasso$bestTune$lambda)
+# Make predictions
+predictions.lasso <- lasso %>% predict(test)
+# Model prediction performance
+tibble(
+  trueValue = wineTestNames,
+  predictedValue = predictions.lasso)
+```
+In questo caso la penalità ha l’effetto di forzare alcune delle stime dei coefficienti, con un contributo minore al modello, a essere esattamente uguale a zero. Il lasso, quindi, può anche essere visto come un’alternativa ai metodi di feature selection per eseguire la selezione delle variabili al fine di ridurre la complessità del modello.
 
-ggplot(knn.accuracyData, aes(knn_fit.PC1$results$k)) + 
-  geom_line(aes(y = PC1, colour = "PC1"), size=1) + geom_point(aes(y = PC1)) +
-  geom_line(aes(y = PC2, colour = "PC2"), size=1) + geom_point(aes(y = PC2)) +
-  geom_line(aes(y = PC12, colour = "PC1&2"), size=1) + geom_point(aes(y = PC12)) +
-  geom_line(aes(y = NO_PCA, colour = "Normal"), size=1) + geom_point(aes(y = NO_PCA)) +
-  scale_color_manual(name = "Y series", values = c("PC1" = "#003fa3", "PC2" = "#00a375", "PC1&2" = "#9800a3", "Normal" = "#a3003c")) +
-  ggtitle("Comparison between Components") +
-  xlab("#Neighbors") + ylab("Accuracy (Repeated Cross Validation)")
+Come nel ridge, è fondamentale selezionare un buon valore di $\lambda$.
+
+Quando lambda è piccolo, il risultato è molto vicino alla stima dei minimi quadrati. All’aumentare di lambda, si verifica una contrazione in modo da poter eliminare le variabili che sono a zero.
+```{r lassoResult, message=FALSE, warning=FALSE}
+caret::confusionMatrix(predictions.lasso, test$wine)
 ```
 
+## Elastic Net
+Elastic Net combina le proprietà di Ridge e Lasso penalizzando il modello usando sia la norma L2 che la norma L1:
+$$
+L_{ElasticNet}(\hat{\beta}) = \frac{\sum_{i = 1}^{n}{(y_i - x_i\hat{\beta})^2}}{2n} + \lambda(\frac{1-\alpha}{2}\sum_{k = 1}^{K}{\hat{\beta}_k^2} + \alpha\sum_{k = 1}^{K}{|\hat{\beta}_k}|)
+$$
+```{r caretElastic, message=FALSE, warning=FALSE}
+set.seed(123)
+elastic <- caret::train(
+  x = train[,-1],
+  y = factor(train[,1]),
+  method = "glmnet",
+  trControl = trainControl("cv", number = 10, classProbs = TRUE, summaryFunction = multiClassSummary),
+  metric="Accuracy")
+# Model coefficients
+coef(elastic$finalModel, elastic$bestTune$lambda)
+# Make predictions
+predictions.enet <- elastic %>% predict(test)
+# Model prediction performance
+tibble(
+  trueValue = wineTestNames,
+  predictedValue = predictions.enet)
+```
+Oltre a impostare e scegliere un valore lambda, l’*elastic net* ci consente anche di ottimizzare il parametro alfa dove $\alpha = 0$ corrisponde a *ridge* e $\alpha = 1$ al *lasso*.
+
+Pertanto possiamo scegliere un valore $\alpha$ compreso tra 0 e 1 per ottimizzare l’elastic net. Se tale valore è incluso in questo intervallo, si avrà una riduzione con alcuni portati a $0$.
+
+```{r enetResult, message=FALSE, warning=FALSE}
+caret::confusionMatrix(predictions.enet, test$wine)
+```
+
+## Summary delle prestazioni
+```{r confMatrix, message=FALSE, warning=FALSE}
+models <- list(ridge = caret::confusionMatrix(predictions.ridge, test$wine)$overall[1], 
+               lasso = caret::confusionMatrix(predictions.lasso,test$wine)$overall[1],
+               elastic = caret::confusionMatrix(predictions.enet,test$wine)$overall[1])
+for(j in 1:length(models)){
+  print(paste("Accuracy of",names(models[j]),"=",round(models[[j]],3)))
+}
+```
+# Parsimonious Gaussian Mixture Models
+```{r advanced, message=FALSE, warning=FALSE}
+dist <- dist(wines[,-1], method = "manhattan")
+dendo <- hclust(dist, method = "ward.D")
+custom <- list()
+for (i in 3:4){
+  custom[[i]] = cutree(dendo, k=i)
+}
+
+models_to_run <- c("UCU", "UCC", "CUU", "CUC", "CCU", "CCC")
+
+# Il rilassamento dato da (p-q)^2 > p+q è verificato per  1 <= q <= 20
+pg.kmeans <- pgmmEM(scale(wines[,-1]), rG=3:4, rq=1:7, icl=T, zstart=2,seed=1234, modelSubset=models_to_run)
+table(wines[,1],pg.kmeans$map)
+adjustedRandIndex(wines[,1],pg.kmeans$map)
+
+pg.manhattan <- pgmmEM(scale(wines[,-1]), rG=3:4, rq=1:7, icl=T, zstart = 3, seed = 1234, zlist = custom, modelSubset=models_to_run)
+table(wines[,1],pg.manhattan$map)
+adjustedRandIndex(wines[,1],pg.manhattan$map)
+```
+
+# Confronto finale
+```{r summaryOfAllModels, message=FALSE, warning=FALSE, rows.print=17}
+summaryOfModels <- function(df, models){
+  nModel <- length(models)
+  ari <- NULL
+  bic <- NULL
+  icl <- NULL
+  G <- NULL
+  for(i in 1:nModel){
+    if (class(models[[i]])=='kmeans'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$cluster)
+      bic[i] <- NA
+      icl[i] <- NA
+      G[i] <- length(unique(models[[i]]$cluster))
+    } else if (class(models[[i]])=='pam') {
+      ari[i] <- adjustedRandIndex(df,models[[i]]$clustering)
+      bic[i] <- NA
+      icl[i] <- NA
+      G[i] <- length(models[[i]]$id.med)
+    } else if (class(models[[i]])=='KMeansSparseCluster'){
+      modelName <- models[[i]]
+      ari[i] <- adjustedRandIndex(df,modelName[[1]]$Cs)
+      bic[i] <- NA
+      icl[i] <- NA
+      G[i] <- modelName[[1]]$wbound
+    } else if (class(models[[i]])=='Mclust'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$classification)
+      bic[i] <- models[[i]]$bic
+      icl[i] <- models[[i]]$icl
+      G[i] <- models[[i]]$G
+    } else if (class(models[[i]])=='ContaminatedMixt'){
+      bestModel <- getBestModel(models[[i]], criterion = 'ICL')$models[[1]]
+      ari[i] <- adjustedRandIndex(df,bestModel$group)
+      bic[i] <- bestModel$IC$BIC
+      icl[i] <- bestModel$IC$ICL
+      G[i] <- bestModel$G
+    } else if (class(models[[i]])=='teigen'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$iclresults$classification)
+      bic[i] <- models[[i]]$bic
+      icl[i] <- models[[i]]$iclresults$icl
+      G[i] <- models[[i]]$G
+    } else if (class(models[[i]])=='pgmm'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$map)
+      G[i] <- models[[i]]$g
+      ifelse(is.null(models[[i]]$bic[1])==TRUE,
+             bic[i] <- NA,
+             bic[i] <- as.double(models[[i]]$bic[1]))
+      ifelse(is.null(models[[i]]$icl[1])==TRUE,
+             icl[i] <- NA,
+             icl[i] <- as.double(models[[i]]$icl[1]))
+    } else if (class(models[[i]])=='tkmeans'){
+      ari[i] <- adjustedRandIndex(df,models[[i]]$cluster)
+      G[i] <- models[[i]]$k
+      bic[i] <- NA
+      icl[i] <- NA
+    }
+  }
+  outputDF <- data.frame('AdjustedRandIndex' = ari,
+                         'BIC' = bic,
+                         'ICL' = icl,
+                         'G' = as.integer(G),
+                         row.names = c('KMeans3',
+                                       'KMeans4',
+                                       'PAM3',
+                                       'PAM4',
+                                       'VS-Greedy',
+                                       'VS-Headlong',
+                                       'VSCC',
+                                       'KMeansSparse3',
+                                       'KMeansSparse4',
+                                       'VS-MVN',
+                                       'VS-Contaminated Mixt',
+                                       'VS-VS-Contaminated KMeans',
+                                       'VS-Contaminated RPost',
+                                       'VS-Contaminated RClass',
+                                       'VS-TEigen KMeans',
+                                       'VS-TEigen Hard',
+                                       'VS-TEigen Soft'),
+                         stringsAsFactors = F)
+  return(outputDF)
+}
+test <- summaryOfModels(wines[,1],list(
+                             k.means.3,
+                             k.means.4,
+                             PAM.3,
+                             PAM.4,
+                             subset.greedy$model,
+                             subset.headlong$model,
+                             vscc.mclust$bestmodel,
+                             km.sparse.3,
+                             km.sparse.4,
+                             mixt.selected.wines,
+                             cn.wines.mixt,
+                             cn.wines.kmeans,
+                             cn.wines.rpost,
+                             cn.wines.rclass,
+                             teigen.kmeans,
+                             teigen.hard,
+                             teigen.soft))
+print(test, n=20)
+```
 # Modellazione 3D
 ```{r 3ds, message=FALSE, warning=FALSE}
 # best 3 for separation
 plot3d(wines$flavanoids, wines$OD_dw, wines$proline, type='s', size=2, col=as.numeric(wines$wine))
 # worst 3 for separation
 plot3d(wines$methanol, wines$potassium, wines$pH, type='s', size=2, col=as.numeric(wines$wine))
-```
-
-# Modellazione 3D PCA
-```{r 3ds PCA, message=FALSE, warning=FALSE}
-# Migliori 3 per PCA che spiegano il 50,55% della varianza
-plot3d(pc.comp[,1], pc.comp[,2], pc.comp[,3], type='s', size=2, col=as.numeric(wines$wine))
-pc.comp[,1]
 ```
