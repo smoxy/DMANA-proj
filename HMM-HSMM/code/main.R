@@ -1,7 +1,8 @@
 ###################################LOAD#########################################
 load(url("https://github.com/smoxy/DMANA-proj/blob/main/HMM-HSMM/code/Examples_L31.RData?raw=true"))
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
-loadPackages(c('ggplot2','gamlss','tidyverse','tidyquant','magrittr','tseries','MVN','mhsmm','doParallel'))
+loadPackages(c('ggplot2','gamlss','tidyverse','tidyquant','magrittr',
+               'tseries','MVN','mhsmm','doParallel'))
 rm(returns)
 rm(pollution)
 rm(stock.names)
@@ -61,67 +62,78 @@ qqline(StockReturns2$ESTX50)
 mvn(StockReturns2[,-c(1,4,5)],mvnTest="mardia",multivariatePlot="qq")
 ###################################HMM##########################################
 newDF <- StockReturns2[,-c(1,4,5)]
-initialization <- kmeans(newDF,3)
-kmeans.means <- initialization$centers
-sigma1 <- cov(newDF[initialization$cluster==1,])
-sigma2 <- cov(newDF[initialization$cluster==2,])
-sigma3 <- cov(newDF[initialization$cluster==3,])
-
-K <- 3
-start.val <- hmmspec(init = rep(1/K, K),
-                     trans = matrix(1/K, nrow = K, ncol = K),
-                     parms.emis = list(mu=list(kmeans.means[1,],kmeans.means[2,],kmeans.means[3,]),
-                                       sigma=list(sigma1,sigma2,sigma3)),
-                     dens.emis = dmvnorm.hsmm)
-mod.hmm.k2.v1 <- hmmfit(matrix(unlist(newDF),ncol=2),
-                        start.val, mstep = mstep.mvnorm)
-plot(newDF,col=mod.hmm.k2.v1$yhat)
-
-B <- 1000 # replicates
-mu.boot <- matrix(NA,6,B)
-sigma.boot <- matrix(NA,12,B)
-for (b in 1:B)
-{
-  true.par <- hmmspec(init = mod.hmm.k2.v1$model$init,
-                      trans = mod.hmm.k2.v1$model$transition,
-                      parms.emis = list(mu = mod.hmm.k2.v1$model$parms.emission$mu,
-                                        sigma = mod.hmm.k2.v1$model$parms.emission$sigma),
-                      dens.emis = dmvnorm.hsmm)
-  train <- simulate(true.par, nsim = nrow(newDF), seed = b, rand.emis = rmvnorm.hsmm)
-  mod.boot <- hmmfit(train, true.par, mstep = mstep.mvnorm)
-  mu.boot[,b] <- unlist(mod.boot$model$parms.emission$mu)
-  sigma.boot[,b] <- unlist(mod.boot$model$parms.emission$sigma)
-}
-apply(mu.boot,1,mean)
-apply(mu.boot,1,sd)
-apply(sigma.boot,1,mean)
-apply(sigma.boot,1,sd)
-t(matrix(apply(sigma.boot,1,mean),ncol = 6))
+# initialization <- kmeans(newDF,3)
+# kmeans.means <- initialization$centers
+# sigma1 <- cov(newDF[initialization$cluster==1,])
+# sigma2 <- cov(newDF[initialization$cluster==2,])
+# sigma3 <- cov(newDF[initialization$cluster==3,])
+#
+# K <- 3
+# start.val <- hmmspec(init = rep(1/K, K),
+#                      trans = matrix(1/K, nrow = K, ncol = K),
+#                      parms.emis = list(mu=list(kmeans.means[1,],kmeans.means[2,],kmeans.means[3,]),
+#                                        sigma=list(sigma1,sigma2,sigma3)),
+#                      dens.emis = dmvnorm.hsmm)
+# mod.hmm.k2.v1 <- hmmfit(matrix(unlist(newDF),ncol=2),
+#                         start.val, mstep = mstep.mvnorm)
+# plot(newDF,col=mod.hmm.k2.v1$yhat)
+#
+# B <- 1000 # replicates
+# mu.boot <- matrix(NA,6,B)
+# sigma.boot <- matrix(NA,12,B)
+# for (b in 1:B)
+# {
+#   true.par <- hmmspec(init = mod.hmm.k2.v1$model$init,
+#                       trans = mod.hmm.k2.v1$model$transition,
+#                       parms.emis = list(mu = mod.hmm.k2.v1$model$parms.emission$mu,
+#                                         sigma = mod.hmm.k2.v1$model$parms.emission$sigma),
+#                       dens.emis = dmvnorm.hsmm)
+#   train <- simulate(true.par, nsim = nrow(newDF), seed = b, rand.emis = rmvnorm.hsmm)
+#   mod.boot <- hmmfit(train, true.par, mstep = mstep.mvnorm)
+#   mu.boot[,b] <- unlist(mod.boot$model$parms.emission$mu)
+#   sigma.boot[,b] <- unlist(mod.boot$model$parms.emission$sigma)
+# }
+# apply(mu.boot,1,mean)
+# apply(mu.boot,1,sd)
+# apply(sigma.boot,1,mean)
+# apply(sigma.boot,1,sd)
+# t(matrix(apply(sigma.boot,1,mean),ncol = 6))
 
 #################################BOOTSTRAP######################################
-
-bootstrap = function(data, nclust, R){
+bootstrap.N.HMM = function(data, nclust, R){
   master = list()
-  registerDoParallel(5)
+  cores <- ifelse(detectCores()>6,
+                  cores <- 6,
+                  cores <- 4)
+  cl <- makeCluster(cores)
+  registerDoParallel(cl)
   master<-append(master,foreach(num = 2:nclust) %dopar% {
     require(mhsmm)
 
     hsmmAIC <- function(model){
-      m = model$K
+      if (class(model)=='hmm'){
+        m = model$K
+      } else if (class(model)=='hsmm'){
+        m = model$J
+      }
       k = length(model$model$parms.emission)
       p = m^2 + (k*m) - 1
       logL = max(model$loglik)
-      AIC = (-2 * logL) + (2*p)
+      AIC = (2 * logL) + (2*p)
       return(AIC)
     }
 
     hsmmBIC <- function(model){
+      if (class(model)=='hmm'){
+        m = model$K
+      } else if (class(model)=='hsmm'){
+        m = model$J
+      }
       nObs = length(model$yhat)
-      m = model$K
       k = length(model$model$parms.emission)
       p = (m^2 + (k*m)) - 1
       logL = max(model$loglik)
-      BIC = (-2 * logL) + (p*log(nObs))
+      BIC = (2 * logL) + (p*log(nObs))
       return(BIC)
     }
 
@@ -150,13 +162,12 @@ bootstrap = function(data, nclust, R){
                           parms.emis = list(mu = mod.hmm$model$parms.emission$mu,
                                             sigma = mod.hmm$model$parms.emission$sigma),
                           dens.emis = dmvnorm.hsmm)
-      train <- simulate(true.par, nsim = nrow(data), seed = b, rand.emis = rmvnorm.hsmm)
-      mod.boot <- hmmfit(train, true.par, mstep = mstep.mvnorm)
+      mod.boot <- hmmfit(matrix(unlist(data)), true.par, mstep = mstep.mvnorm)
       mu.boot[,b] <- unlist(mod.boot$model$parms.emission$mu)
       sigma.boot[,b] <- unlist(mod.boot$model$parms.emission$sigma)
     }
 
-    print(paste("Finished state: ",num,sep=""))
+
 
     return(list(k = num,
                 model = mod.hmm,
@@ -168,10 +179,12 @@ bootstrap = function(data, nclust, R){
                 BIC=hsmmBIC(mod.hmm)))
 
   },length(master))
+  stopCluster(cl)
+  return(master)
 }
 
-result <- bootstrap(data = newDF, nclust = 3, R = 100)
-stopImplicitCluster()
+result <- bootstrap(data = newDF, nclust = 6, R = 10)
+
 save(result,file="HMM-Result.RData",safe=T)
 
 ################################################################################
@@ -179,16 +192,79 @@ save(result,file="HMM-Result.RData",safe=T)
 ggplot(StockReturns2, aes(x=NASDAQ)) +
   geom_histogram(aes(y =..density..),
                  color="black", fill="white", binwidth=.1) +
-  stat_function(fun = dnorm, args = list(mean = -0.15234507, sd = 8.3006376), colour="red")+
-  stat_function(fun = dnorm, args = list(mean = 0.03785593 , sd = 1.6453569), colour="green")+
-  stat_function(fun = dnorm, args = list(mean = 0.14786969  , sd = 0.5317181), colour="blue")
+  stat_function(fun = dnorm, args = list(mean = result[[1]]$means.mean[1],
+                                         sd = result[[1]]$sigma.mean[1]), colour="red")+
+  stat_function(fun = dnorm, args = list(mean = result[[1]]$means.mean[3],
+                                         sd = result[[1]]$sigma.mean[5]), colour="green")
+
+ggplot(StockReturns2, aes(x=NASDAQ)) +
+  geom_histogram(aes(y =..density..),
+                 color="black", fill="white", binwidth=.1) +
+  stat_function(fun = dnorm, args = list(mean = result[[2]]$means.mean[1],
+                                         sd = result[[2]]$sigma.mean[1]), colour="red")+
+  stat_function(fun = dnorm, args = list(mean = result[[2]]$means.mean[3],
+                                         sd = result[[2]]$sigma.mean[5]), colour="green")+
+  stat_function(fun = dnorm, args = list(mean = result[[2]]$means.mean[5],
+                                         sd = result[[2]]$sigma.mean[9]), colour="yellow")
+
+ggplot(StockReturns2, aes(x=NASDAQ)) +
+  geom_histogram(aes(y =..density..),
+                 color="black", fill="white", binwidth=.1) +
+  stat_function(fun = dnorm, args = list(mean = result[[3]]$model$model$parms.emission$mu[[1]][1],
+                                         sd = result[[3]]$model$model$parms.emission$sigma[[1]][1]), colour="red")+
+  stat_function(fun = dnorm, args = list(mean = result[[3]]$model$model$parms.emission$mu[[2]][1],
+                                         sd = result[[3]]$model$model$parms.emission$sigma[[2]][1]), colour="green")+
+  stat_function(fun = dnorm, args = list(mean = result[[3]]$model$model$parms.emission$mu[[3]][1],
+                                         sd = result[[3]]$model$model$parms.emission$sigma[[3]][1]), colour="yellow")+
+  stat_function(fun = dnorm, args = list(mean = result[[3]]$model$model$parms.emission$mu[[4]][1],
+                                         sd = result[[3]]$model$model$parms.emission$sigma[[4]][1]), colour="blue")
+
+ggplot(StockReturns2, aes(x=NASDAQ)) +
+  geom_histogram(aes(y =..density..),
+                 color="black", fill="white", binwidth=.1) +
+  stat_function(fun = dnorm, args = list(mean = result[[5]]$means.mean[1],
+                                         sd = result[[5]]$sigma.mean[1]), colour="red")+
+  stat_function(fun = dnorm, args = list(mean = result[[5]]$means.mean[3],
+                                         sd = result[[5]]$sigma.mean[5]), colour="green")+
+  stat_function(fun = dnorm, args = list(mean = result[[5]]$means.mean[5],
+                                         sd = result[[5]]$sigma.mean[9]), colour="yellow")+
+  stat_function(fun = dnorm, args = list(mean = result[[5]]$means.mean[7],
+                                         sd = result[[5]]$sigma.mean[13]), colour="blue")+
+  stat_function(fun = dnorm, args = list(mean = result[[5]]$means.mean[9],
+                                         sd = result[[5]]$sigma.mean[17]), colour="purple")+
+  stat_function(fun = dnorm, args = list(mean = result[[5]]$means.mean[11],
+                                         sd = result[[5]]$sigma.mean[21]), colour="orange")
+##########
 
 ggplot(StockReturns2, aes(x=ESTX50)) +
   geom_histogram(aes(y =..density..),
                  color="black", fill="white", binwidth=.1) +
-  stat_function(fun = dnorm, args = list(mean = -0.11874290, sd = 8.9762954), colour="red")+
-  stat_function(fun = dnorm, args = list(mean = -0.06172499, sd = 2.1158288), colour="green")+
-  stat_function(fun = dnorm, args = list(mean = 0.11453419, sd = 0.6186066), colour="blue")
+  stat_function(fun = dnorm, args = list(mean = result[[1]]$means.mean[2],
+                                         sd = result[[1]]$sigma.mean[4]), colour="red")+
+  stat_function(fun = dnorm, args = list(mean = result[[1]]$means.mean[4],
+                                         sd = result[[1]]$sigma.mean[8]), colour="green")
+
+ggplot(StockReturns2, aes(x=ESTX50)) +
+  geom_histogram(aes(y =..density..),
+                 color="black", fill="white", binwidth=.1) +
+  stat_function(fun = dnorm, args = list(mean = result[[2]]$model$model$parms.emission$mu[[1]][2],
+                                         sd = result[[2]]$model$model$parms.emission$sigma[[1]][4]), colour="red")+
+  stat_function(fun = dnorm, args = list(mean = result[[2]]$model$model$parms.emission$mu[[2]][2],
+                                         sd = result[[2]]$model$model$parms.emission$sigma[[2]][4]), colour="green")+
+  stat_function(fun = dnorm, args = list(mean = result[[2]]$model$model$parms.emission$mu[[3]][2],
+                                         sd = result[[2]]$model$model$parms.emission$sigma[[3]][4]), colour="yellow")
+
+ggplot(StockReturns2, aes(x=ESTX50)) +
+  geom_histogram(aes(y =..density..),
+                 color="black", fill="white", binwidth=.1) +
+  stat_function(fun = dnorm, args = list(mean = result[[3]]$model$model$parms.emission$mu[[1]][2],
+                                         sd = result[[3]]$model$model$parms.emission$sigma[[1]][4]), colour="red")+
+  stat_function(fun = dnorm, args = list(mean = result[[3]]$model$model$parms.emission$mu[[2]][2],
+                                         sd = result[[3]]$model$model$parms.emission$sigma[[2]][4]), colour="green")+
+  stat_function(fun = dnorm, args = list(mean = result[[3]]$model$model$parms.emission$mu[[3]][2],
+                                         sd = result[[3]]$model$model$parms.emission$sigma[[3]][4]), colour="yellow")+
+  stat_function(fun = dnorm, args = list(mean = result[[3]]$model$model$parms.emission$mu[[4]][2],
+                                         sd = result[[3]]$model$model$parms.emission$sigma[[4]][4]), colour="blue")
 
 ################################################################################
 initialization <- kmeans(newDF,3)
@@ -197,9 +273,9 @@ sigma1 <- cov(newDF[initialization$cluster==1,])
 sigma2 <- cov(newDF[initialization$cluster==2,])
 sigma3 <- cov(newDF[initialization$cluster==3,])
 
-J <- 3
-init <- rep(1/J, J)
-P <- matrix(c(0, .5, .5, .5, 0, .5, .5, .5, 0), nrow = J)
+K <- 3
+init <- rep(1/K, K)
+P <- matrix(c(0, .5, .5, .5, 0, .5, .5, .5, 0), nrow = K)
 B <- list(
   mu = list(kmeans.means[1,],kmeans.means[2,],kmeans.means[3,]),
   sigma = list(sigma1,sigma2,sigma3))
@@ -215,7 +291,63 @@ model <- hsmmspec(init=init,
 
 model <- hsmmfit(matrix(unlist(newDF),ncol=2),
                 model, mstep = mstep.mvnorm)
-plot(model)
+plot(model,xlim=c(0,200))
+plot(newDF,col=model$yhat)
+hist(StockReturns2$NASDAQ, breaks = 1000, freq=F)
+lines(y=dnorm(seq(-10,10,length=1000),
+              model$model$parms.emission$mu[[1]][1],
+              model$model$parms.emission$sigma[[1]][1]),x=seq(-10,10,length=1000),col='red',lwd=2)
+lines(y=dnorm(seq(-10,10,length=1000),
+              model$model$parms.emission$mu[[2]][1],
+              model$model$parms.emission$sigma[[2]][1]),x=seq(-10,10,length=1000),col='green',lwd=2)
+lines(y=dnorm(seq(-10,10,length=1000),
+              model$model$parms.emission$mu[[3]][1],
+              model$model$parms.emission$sigma[[3]][1]),x=seq(-10,10,length=1000),col='yellow',lwd=2)
+lines(y=dnorm(seq(-10,10,length=1000),
+              model$model$parms.emission$mu[[4]][1],
+              model$model$parms.emission$sigma[[4]][1]),x=seq(-10,10,length=1000),col='yellow',lwd=2)
+
+hist(StockReturns2$ESTX50, breaks = 1000, freq=F)
+lines(y=dnorm(seq(-10,10,length=1000),
+              model$model$parms.emission$mu[[1]][2],
+              model$model$parms.emission$sigma[[1]][4]),x=seq(-10,10,length=1000),col='red',lwd=2)
+lines(y=dnorm(seq(-10,10,length=1000),
+              model$model$parms.emission$mu[[2]][2],
+              model$model$parms.emission$sigma[[2]][4]),x=seq(-10,10,length=1000),col='green',lwd=2)
+lines(y=dnorm(seq(-10,10,length=1000),
+              model$model$parms.emission$mu[[3]][2],
+              model$model$parms.emission$sigma[[3]][4]),x=seq(-10,10,length=1000),col='yellow',lwd=2)
+
+
+
+####################################N-HSMM-GAMMA################################
+initialization <- kmeans(newDF,3)
+kmeans.means <- initialization$centers
+sigma1 <- cov(newDF[initialization$cluster==1,])
+sigma2 <- cov(newDF[initialization$cluster==2,])
+sigma3 <- cov(newDF[initialization$cluster==3,])
+
+K <- 3
+init <- rep(1/K, K)
+P <- matrix(c(0, .5, .5, .5, 0, .5, .5, .5, 0), nrow = K)
+B <- list(
+  mu = list(kmeans.means[1,],kmeans.means[2,],kmeans.means[3,]),
+  sigma = list(sigma1,sigma2,sigma3))
+
+d <- list(shape = c(2, 5, 7), scale = c(2, 2, 2), type = "gamma")
+
+model <- hsmmspec(init=init,
+                  transition = P,
+                  parms.emis = B,
+                  sojourn = d,
+                  dens.emis = dmvnorm.hsmm,
+                  mstep = mstep.mvnorm)
+
+model <- hsmmfit(matrix(unlist(newDF),ncol=2),
+                 model, mstep = mstep.mvnorm)
+
+plot(model$loglik, type = "b", ylab = "Log-likelihood", xlab = "Iteration")
+plot(model,xlim=c(0,200))
 plot(newDF,col=model$yhat)
 hist(StockReturns2$NASDAQ, breaks = 1000, freq=F)
 lines(y=dnorm(seq(-10,10,length=1000),
@@ -241,3 +373,118 @@ lines(y=dnorm(seq(-10,10,length=1000),
 lines(y=dnorm(seq(-10,10,length=1000),
               model$model$parms.emission$mu[[3]][2],
               model$model$parms.emission$sigma[[3]][4]),x=seq(-10,10,length=1000),col='yellow',lwd=2)
+
+
+####################################N-HSMM-GAMMA################################
+bootstrap.N.HSMM.POISSON <- function(data, nclust, R) {
+  master = list()
+  cores <- ifelse(detectCores() > 6,
+                  cores <- 6,
+                  cores <- 4)
+  cl <- makeCluster(cores)
+  registerDoParallel(cl)
+  master <- append(master, foreach(num = 2:nclust) %dopar% {
+    require(mhsmm)
+
+    hsmmAIC <- function(model) {
+      if (class(model) == 'hmm') {
+        m = model$K
+      } else if (class(model) == 'hsmm') {
+        m = model$J
+      }
+      k = length(model$model$parms.emission)
+      p = m ^ 2 + (k * m) - 1
+      logL = max(model$loglik)
+      AIC = (2 * logL) + (2 * p)
+      return(AIC)
+    }
+
+    hsmmBIC <- function(model) {
+      if (class(model) == 'hmm') {
+        m = model$K
+      } else if (class(model) == 'hsmm') {
+        m = model$J
+      }
+      nObs = length(model$yhat)
+      k = length(model$model$parms.emission)
+      p = (m ^ 2 + (k * m)) - 1
+      logL = max(model$loglik)
+      BIC = (2 * logL) + (p * log(nObs))
+      return(BIC)
+    }
+
+    initialization <- kmeans(data, num)
+    kmeans.means <- initialization$centers
+    km.means.list = list()
+    sigma.list = list()
+
+    for (n in 1:num) {
+      sigma.list[[n]] = cov(data[initialization$cluster == n, ])
+      km.means.list[[n]] = kmeans.means[n, ]
+    }
+
+    K <- num
+    init <- rep(1 / K, K)
+    P <- matrix(1 / (K - 1), ncol = K, nrow = K)
+    diag(P) <- 0
+    B <- list(mu = km.means.list,
+              sigma = sigma.list)
+
+    d <-list(
+      lambda = sample(1:500, K),
+      shift = sample(10:100, K),
+      type = "poisson")
+
+
+    start.val <- hsmmspec(
+      init = init,
+      transition = P,
+      parms.emis = B,
+      sojourn = d,
+      dens.emis = dmvnorm.hsmm,
+      mstep = mstep.mvnorm)
+
+    mod.hsmm <- hsmmfit(matrix(unlist(data),ncol = 2),
+                        start.val, mstep = mstep.mvnorm)
+    mu.boot <- matrix(NA, K * 2, R)
+    sigma.boot <- matrix(NA, K * 4, R)
+    for (b in 1:R){
+      true.par <- hsmmspec(
+        init = mod.hsmm$model$init,
+        transition = mod.hsmm$model$transition,
+        parms.emis = list(
+          mu = mod.hsmm$model$parms.emission$mu,
+          sigma = mod.hsmm$model$parms.emission$sigma),
+        sojourn = list(
+          lambda = mod.hsmm$model$sojourn$lambda,
+          shift = mod.hsmm$model$sojourn$shift,
+          type = mod.hsmm$model$sojourn$type),
+        dens.emis = dmvnorm.hsmm,
+        mstep = mstep.mvnorm)
+      mod.boot <- hsmmfit(matrix(unlist(data),ncol=2), true.par, mstep = mstep.mvnorm)
+      mu.boot[, b] <- unlist(mod.boot$model$parms.emission$mu)
+      sigma.boot[, b] <- unlist(mod.boot$model$parms.emission$sigma)
+    }
+
+    return(list(
+      k = num,
+      model = mod.hsmm,
+      means.mean = t(matrix(apply(mu.boot, 1, mean), ncol = K * 2)),
+      means.sd = t(matrix(apply(mu.boot, 1, sd), ncol = K * 2)),
+      sigma.mean = t(matrix(apply(sigma.boot, 1, mean), ncol = K * 2 ** 2)),
+      sigma.sd = t(matrix(apply(sigma.boot, 1, sd), ncol = K * 2 ** 2)),
+      AIC = hsmmAIC(mod.hsmm),
+      BIC = hsmmBIC(mod.hsmm)))
+  }, length(master))
+
+  stopCluster(cl)
+  return(master)
+}
+
+HSMM <-
+  bootstrap.N.HSMM.POISSON(
+    data = newDF,
+    nclust = 3,
+    R = 10)
+
+save(result, file = "HMM-Result5.RData", safe = T)
