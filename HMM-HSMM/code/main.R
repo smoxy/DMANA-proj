@@ -39,7 +39,7 @@ Stocks <- dfStruct(StockReturns2)
 Stocks %>%
   ggplot(., aes(x=date, y=value, group=name))+
     geom_line(size=.7, col="gray13") +
-    scale_x_date(date_labels = "%Y", date_breaks="2 year") +
+    scale_x_date(date_labels = "%m-%y", date_breaks="4 months") +
     facet_wrap(~ name, ncol = 1, scale = "free_y") +
     labs(title = "ESTX50, FTSE, NASDAQ & SP500 Chart",
          subtitle = "Multiple Stocks",
@@ -103,8 +103,8 @@ newDF <- StockReturns2[,-c(1,4,5)]
 bootstrap.N.HMM = function(data, nclust, R){
   master = list()
   cores <- ifelse(detectCores()>6,
-                  cores <- 6,
-                  cores <- 4)
+                  cores <- 3,
+                  cores <- 3)
   cl <- makeCluster(cores)
   registerDoParallel(cl)
   master<-append(master,foreach(num = 2:nclust) %dopar% {
@@ -162,7 +162,10 @@ bootstrap.N.HMM = function(data, nclust, R){
                           parms.emis = list(mu = mod.hmm$model$parms.emission$mu,
                                             sigma = mod.hmm$model$parms.emission$sigma),
                           dens.emis = dmvnorm.hsmm)
-      mod.boot <- hmmfit(matrix(unlist(data)), true.par, mstep = mstep.mvnorm)
+
+      train <- simulate(true.par, nsim = 100, seed = b, rand.emis = rmvnorm.hsmm)
+
+      mod.boot <- hmmfit(train, true.par, mstep = mstep.mvnorm)
       mu.boot[,b] <- unlist(mod.boot$model$parms.emission$mu)
       sigma.boot[,b] <- unlist(mod.boot$model$parms.emission$sigma)
     }
@@ -183,9 +186,8 @@ bootstrap.N.HMM = function(data, nclust, R){
   return(master)
 }
 
-result <- bootstrap(data = newDF, nclust = 6, R = 10)
-
-save(result,file="HMM-Result.RData",safe=T)
+HMM <- bootstrap.N.HMM(data = newDF, nclust = 3, R = 500)
+save(HMM,file="N-HMM-2.RData",safe=T)
 
 ################################################################################
 
@@ -280,17 +282,19 @@ B <- list(
   mu = list(kmeans.means[1,],kmeans.means[2,],kmeans.means[3,]),
   sigma = list(sigma1,sigma2,sigma3))
 
-d <- list(lambda = c(10, 30, 60), shift = c(10, 100, 30), type = "poisson")
+d <- list(lambda = c(10, 30, 60), shift = c(1, 1, 1), type = "poisson")
 
-model <- hsmmspec(init=init,
+true.par <- hsmmspec(init=init,
                   transition = P,
                   parms.emis = B,
                   sojourn = d,
                   dens.emis = dmvnorm.hsmm,
                   mstep = mstep.mvnorm)
 
-model <- hsmmfit(matrix(unlist(newDF),ncol=2),
-                model, mstep = mstep.mvnorm)
+train <- simulate(true.par, nsim = nrow(newDF), seed = 1234, rand.emis = rmvnorm.hsmm)
+model <- hsmmfit(train, true.par, mstep = mstep.mvnorm)
+
+
 plot(model,xlim=c(0,200))
 plot(newDF,col=model$yhat)
 hist(StockReturns2$NASDAQ, breaks = 1000, freq=F)
@@ -329,22 +333,23 @@ sigma3 <- cov(newDF[initialization$cluster==3,])
 
 K <- 3
 init <- rep(1/K, K)
-P <- matrix(c(0, .5, .5, .5, 0, .5, .5, .5, 0), nrow = K)
+P <- matrix(1 / (K - 1), ncol = K, nrow = K)
+diag(P) <- 0
 B <- list(
   mu = list(kmeans.means[1,],kmeans.means[2,],kmeans.means[3,]),
   sigma = list(sigma1,sigma2,sigma3))
 
 d <- list(shape = c(2, 5, 7), scale = c(2, 2, 2), type = "gamma")
 
-model <- hsmmspec(init=init,
+true.par <- hsmmspec(init=init,
                   transition = P,
                   parms.emis = B,
                   sojourn = d,
                   dens.emis = dmvnorm.hsmm,
                   mstep = mstep.mvnorm)
 
-model <- hsmmfit(matrix(unlist(newDF),ncol=2),
-                 model, mstep = mstep.mvnorm)
+train <- simulate(true.par, nsim = nrow(newDF), seed = 1234, rand.emis = rmvnorm.hsmm)
+model <- hsmmfit(train, true.par, mstep = mstep.mvnorm)
 
 plot(model$loglik, type = "b", ylab = "Log-likelihood", xlab = "Iteration")
 plot(model,xlim=c(0,200))
@@ -375,12 +380,12 @@ lines(y=dnorm(seq(-10,10,length=1000),
               model$model$parms.emission$sigma[[3]][4]),x=seq(-10,10,length=1000),col='yellow',lwd=2)
 
 
-####################################N-HSMM-GAMMA################################
+####################################N-HSMM-POISSON##############################
 bootstrap.N.HSMM.POISSON <- function(data, nclust, R) {
   master = list()
   cores <- ifelse(detectCores() > 6,
-                  cores <- 6,
-                  cores <- 4)
+                  cores <- 3,
+                  cores <- 3)
   cl <- makeCluster(cores)
   registerDoParallel(cl)
   master <- append(master, foreach(num = 2:nclust) %dopar% {
@@ -444,8 +449,7 @@ bootstrap.N.HSMM.POISSON <- function(data, nclust, R) {
       dens.emis = dmvnorm.hsmm,
       mstep = mstep.mvnorm)
 
-    mod.hsmm <- hsmmfit(matrix(unlist(data),ncol = 2),
-                        start.val, mstep = mstep.mvnorm)
+    mod.hsmm <- hsmmfit(matrix(unlist(data),ncol = 2), start.val, mstep = mstep.mvnorm)
     mu.boot <- matrix(NA, K * 2, R)
     sigma.boot <- matrix(NA, K * 4, R)
     for (b in 1:R){
@@ -461,7 +465,10 @@ bootstrap.N.HSMM.POISSON <- function(data, nclust, R) {
           type = mod.hsmm$model$sojourn$type),
         dens.emis = dmvnorm.hsmm,
         mstep = mstep.mvnorm)
-      mod.boot <- hsmmfit(matrix(unlist(data),ncol=2), true.par, mstep = mstep.mvnorm)
+
+      train <- simulate(true.par, nsim = 100, seed = b, rand.emis = rmvnorm.hsmm)
+
+      mod.boot <- hsmmfit(train, true.par, mstep = mstep.mvnorm)
       mu.boot[, b] <- unlist(mod.boot$model$parms.emission$mu)
       sigma.boot[, b] <- unlist(mod.boot$model$parms.emission$sigma)
     }
@@ -484,7 +491,7 @@ bootstrap.N.HSMM.POISSON <- function(data, nclust, R) {
 HSMM <-
   bootstrap.N.HSMM.POISSON(
     data = newDF,
-    nclust = 3,
-    R = 10)
+    nclust = 4,
+    R = 500)
 
-save(result, file = "HMM-Result5.RData", safe = T)
+save(HSMM, file = "N-HSMM-2-4-Poisson.RData", safe = T)
