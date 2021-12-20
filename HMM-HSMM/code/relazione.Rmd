@@ -272,16 +272,25 @@ plot(newDF[,1],
      main = "2 states N-HMM",
      xlab="Obs",
      ylab=colnames(newDF)[1])
+HMM[[1]]$model$model$transition
+colSums(HMM[[1]]$model$model$transition)/2
+
+
 plot(newDF[,1],
      col=HMM[[2]]$model$yhat,
      main = "3 states N-HMM",
      xlab="Obs",
      ylab=colnames(newDF)[1])
+HMM[[2]]$model$model$transition
+colSums(HMM[[2]]$model$model$transition)/3
+
 plot(newDF[,1],
      col=HMM[[3]]$model$yhat,
      main = "4 states N-HMM",
      xlab="Obs",
      ylab=colnames(newDF)[1])
+HMM[[3]]$model$model$transition
+colSums(HMM[[3]]$model$model$transition)/4
 ```
 
 ```{r NASDAQ-HMM, message=FALSE, warning=FALSE, paged.print=TRUE}
@@ -476,16 +485,24 @@ plot(newDF[,1],
      main = "2 states N-HMM",
      xlab="Obs",
      ylab=colnames(newDF)[1])
+HSMM[[1]]$model$model$transition
+colSums(HSMM[[1]]$model$model$transition)/2
+
 plot(newDF[,1],
      col=HSMM[[2]]$model$yhat,
      main = "3 states N-HMM",
      xlab="Obs",
      ylab=colnames(newDF)[1])
+HSMM[[2]]$model$model$transition
+colSums(HSMM[[2]]$model$model$transition)/3
+
 plot(newDF[,1],
      col=HSMM[[3]]$model$yhat,
      main = "4 states N-HMM",
      xlab="Obs",
      ylab=colnames(newDF)[1])
+HSMM[[3]]$model$model$transition
+colSums(HSMM[[3]]$model$model$transition)/4
 ```
 
 ```{r NASDAQ-HSMM, message=FALSE, warning=FALSE, paged.print=TRUE}
@@ -672,14 +689,22 @@ plot(newDF[,1],
      main = "2 states N-HMM",
      xlab="Obs",
      ylab=colnames(newDF)[1])
+GAMMA.HSMM[[1]]$model$model$transition
+colSums(GAMMA.HSMM[[1]]$model$model$transition)/2
+
 plot(newDF[,1],
      col=GAMMA.HSMM[[2]]$model$yhat,
      main = "3 states N-HMM",
      xlab="Obs",
      ylab=colnames(newDF)[1])
+GAMMA.HSMM[[2]]$model$model$transition
+colSums(GAMMA.HSMM[[2]]$model$model$transition)/3
+
 plot(newDF[,1],
      col=GAMMA.HSMM[[3]]$model$yhat,
      main = "4 states N-HMM",
      xlab="Obs",
      ylab=colnames(newDF)[1])
+GAMMA.HSMM[[3]]$model$model$transition
+colSums(GAMMA.HSMM[[3]]$model$model$transition)/4
 ```
