@@ -15,8 +15,12 @@ output:
   pdf_document:
     toc: yes
     toc_depth: '3'
-    df_print: paged
     number_sections: yes
+    highlight: tango
+    df_print: kable
+    fig_width: 7
+    fig_height: 6
+    fig_caption: true
   html_document:
     toc: yes
     toc_depth: '3'
@@ -28,9 +32,7 @@ output:
     code_folding: hide
 ---
 # Introduzione
-
-## Librerie
-Pacchetti utilizzati:
+## Librerie utilizzate
 ```{r load, message=FALSE, warning=FALSE, paged.print=TRUE}
 load(url("https://github.com/smoxy/DMANA-proj/blob/main/HMM-HSMM/code/Examples_L31.RData?raw=true"))
 source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
@@ -42,8 +44,16 @@ rm(stock.names)
 pacman::p_loaded()
 ```
 
-# Preprocessing e andamento
-Trasformazione delle date e filtering in periodo della ricerca:
+## Descrizione
+Abbiamo analizzato il dataset **StockReturns** contenente 6444 osservazioni (dal 1990 al 2016) su 6 mercati dove ognuna è riferita ad un particolare giorno (non necessariamente consecutivo ma ordinato cronologicamente):
+
+- **NASDAQ**: *National Association of Securities Dealers Automated Quotation* misura le **100 società** del settore tecnologico, delle telecomunicazioni, della biotecnologia ma anche da società del commercio sia al dettaglio e sia all'ingrosso.
+- **ESTX50**: *EURO STOXX 50* è anch'esso un indice azionario di titoli che comprende una rappresentazione dei principali settori industriali dell'area. È composto da **50 titoli** degli 11 paesi dell'**eurozona**: Austria, Belgio, Finlandia, Francia, Germania, Irlanda, Italia, Lussemburgo, Paesi Bassi, Portogallo e Spagna.
+- **FTSE**: *Financial Times Stock Exchange Milano Indice di Borsa* è il più significativo indice azionario della Borsa Italiana. È il paniere che racchiude di norma, tranne eccezioni, le azioni delle **40 società italiane**, anche se hanno la sede legale all'estero, quotate sull'MTA o sul MIV con maggiore capitalizzazione, flottante e liquidità che rappresentano oltre l’80% della capitalizzazione complessiva e quasi il 90% del controvalore degli scambi.
+- **SP500**: *Standard & Poor 500* è un indice che racchiude tutte le **500 aziende statunitensi** con la più alta capitalizzazione di mercato, quindi ovviamente il NASDAQ è un sottoinsieme di questo paniere
+
+Tra questi ci siamo concentrati sui primi 2 (NASDAQ e ESTX50) rappresentandone l'andamento in funzione del tempo nel periodo compreso tra il **01/01/2003 e il 23/06/2016**.
+
 ```{r prePocessing, message=FALSE, warning=FALSE, include=FALSE, paged.print=TRUE}
 StockReturns %<>%
   mutate(Date=as.Date(StockReturns$Date,format="%d/%m/%Y"))
@@ -52,19 +62,17 @@ StockReturns2 <- StockReturns %>%
                   select(SP500,NASDAQ,ESTX50,FTSE,Date) %>%
                   filter(Date > "2003/01/01" & Date < "2016/06/23")
 ```
-
-Restruct del df per graph con ggplot:
 ```{r ggplotGraph, message=FALSE, warning=FALSE, paged.print=TRUE}
 dfStruct <- function(dataframe){
   dates <- dataframe$Date
-  SP500 <- dataframe$SP500
+  #SP500 <- dataframe$SP500
   NASDAQ <- dataframe$NASDAQ
-  FTSE <- dataframe$FTSE
+  #FTSE <- dataframe$FTSE
   ESTX50 <- dataframe$ESTX50
 
-  name <- rep(c("SP500","NASDAQ","FTSE","ESTX50"),times=c(nrow(dataframe),nrow(dataframe),nrow(dataframe),nrow(dataframe)))
-  dates <- rep(dates, times=4)
-  value <- rep(c(SP500,NASDAQ,FTSE,ESTX50))
+  name <- rep(c("NASDAQ","ESTX50"),times=c(nrow(dataframe),nrow(dataframe)))
+  dates <- rep(dates, times=2)
+  value <- rep(c(NASDAQ,ESTX50))
 
   df <- data.frame("name"=name,
                        "date"=as.Date(dates,format="%d/%m/%Y"),
@@ -76,19 +84,47 @@ Stocks <- dfStruct(StockReturns2)
 
 Stocks %>%
   ggplot(., aes(x=date, y=value, group=name))+
-    geom_line(size=.7, col="gray13") +
-    scale_x_date(date_labels = "%Y", date_breaks="2 year") +
+    geom_line(size=.75, col="gray13") +
+    scale_x_date(date_labels = "%m-%Y", date_breaks="6 months") +
     facet_wrap(~ name, ncol = 1, scale = "free_y") +
-    labs(title = "ESTX50, FTSE, NASDAQ & SP500 Chart",
+    labs(title = "ESTX50 & NASDAQ Chart",
          subtitle = "Multiple Stocks",
          y = "Return",
          x = "") +
-    theme_tq()
+    theme_tq()+
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-# Statistiche descrittive
-Summary statistics:
+Si nota come vi siano stati periodi con molta volatilità:
+
+- Ottobre/Novembre 2008
+- Maggio 2010 
+- Luglio 2011 
+- Settembre 2015
+
+## Statistiche descrittive
 ```{r summaryStats, echo=FALSE, message=FALSE, warning=FALSE, paged.print=TRUE}
+
+p1<-Stocks %>%
+  filter(name=='NASDAQ') %>%
+  ggplot(., aes(x=value))+
+    geom_histogram(aes(y=..density..), fill="gray60", bins=100)+
+    theme_minimal()+
+  labs(y = "NASDAQ", x="")+
+  xlim(-7, 7)+
+  ylim(0,0.5)
+
+p2<-Stocks %>%
+  filter(name=='ESTX50') %>%
+  ggplot(., aes(x=value))+
+    geom_histogram(aes(y=..density..), fill="gray60", bins=100)+
+    theme_minimal()+
+  labs(y = "ESTX50", x="Returns")+
+  xlim(-7, 7)+
+  ylim(0,0.5)
+
+grid.arrange(p1, p2, ncol=1)
+
 Stocks %>%
   group_by(name) %>%
   summarise("Mean"=round(mean(value),3),
@@ -113,17 +149,19 @@ mvn(StockReturns2[,-c(1,4,5)],mvnTest="mardia",multivariatePlot="qq")
 ```
 
 # HMM
+Per modellare l'andamento dei ritorni, abbiamo utilizzato diversi **Hidden Markov Model** con un numero di stati compreso tra 2 e 4. La distribuzione di emissione selezionata è la Normale, mentre i parametri di emissione sono generati dal K-Means. Il vettore degli stati iniziali contiene tutte probabilità uguali esattamente come la matrice di transizione. Per la complessità computazionale del caso, abbiamo ritenuto opportuno parallelizzare il problema riducendo ogni core all'elaborazione di un modello con *n* stati. Avremo dunque 3 core che elaborano parallelamente il modello con 2, 3 e 4 stati. Nel tentativo di introdurre un'incertezza associata alla stima dei parametri delle nostre misture, ci è sembrato opportuno applicare un **Bootstrap Parametrico**. 
+
 ## Parallel Bootstrap
 ```{r N-HMM, message=FALSE, warning=FALSE}
 newDF <- StockReturns2[,-c(1,4,5)]
-bootstrap.N.HMM = function(data, nclust, R){
+bootstrap.N.HMM = function(data, states, R){
   master = list()
   cores <- ifelse(detectCores()>6,
                   cores <- 6,
                   cores <- 4)
   cl <- makeCluster(cores)
   registerDoParallel(cl)
-  master<-append(master,foreach(num = 2:nclust) %dopar% {
+  master<-append(master,foreach(num = 2:states) %dopar% {
     require(mhsmm)
 
     hsmmAIC <- function(model){
@@ -199,9 +237,9 @@ bootstrap.N.HMM = function(data, nclust, R){
   return(master)
 }
 
-load("~/N-HMM-2-4.RData")
+load("Z:/DesktopC/LUMSA/2/Data Mining/HMM-HSMM/data/N-HMM-2-4.RData")
 ```
-
+A riconferma del fatto che la complessità computazionale non fosse banale, il grafico della log likelihood in funzione delle iterazioni dell'algoritmo EM, mostra come all'aumentare del numero di stati, la convergenza sia sempre più lenta e necessiti di più iterazioni.
 ```{r logLik HMM}
 par(mfrow=c(3,1))
 plot(HMM[[1]]$model$loglik, 
@@ -223,6 +261,11 @@ plot(HMM[[3]]$model$loglik,
      xlim=c(0,30),
      main="4 states LogLik")
 ```
+Andando a vedere le osservazioni per ogni stato di appartenenza, si nota come:
+
+- Nel modello 2 stati, le osservazioni vengono divise in periodi ad alta varianza (di seguito **volatilità**) in rosso e periodi di bassa volatilità (in nero).
+- Nel modello a 3 stati, il 3° stato si inserisce come intermedio tra quello ad alta volatilità e a bassa volatilità.
+- A partire da modelli con 4 stati (es. 5, 6, ecc...) l'interpretazione si fa sempre più complessa nell'attribuire un significato ad uno stato specifico. In questo con 4 stati, si delinea la stessa situazione di prima ma con l'aggiunta del 4° che di fatto ne scompone uno in 2.
 ```{r yhat-HMM}
 plot(newDF[,1],
      col=HMM[[1]]$model$yhat,
@@ -240,7 +283,6 @@ plot(newDF[,1],
      xlab="Obs",
      ylab=colnames(newDF)[1])
 ```
-
 
 ```{r NASDAQ-HMM, message=FALSE, warning=FALSE, paged.print=TRUE}
 p1<-ggplot(StockReturns2, aes(x=NASDAQ)) +
@@ -280,16 +322,24 @@ grid.arrange(p1, p2, p3, ncol=1)
 ```
 
 # HSMM
+Come nel **HMM** abbiamo scelto la *Normale* come ED, inizializzato gli stati con un vettore di probabilità uguali, applicato il K-Means per i parametri di emissione e utilizzato come SD sia la Poisson (shifted) che la Gamma. La matrice di transizione è stata modellata come segue:
+
+```{r transitionMatrix, message=FALSE, warning=FALSE}
+K <- 3
+P <- matrix(1 / (K - 1), ncol = K, nrow = K)
+diag(P) <- 0
+```
+
 ## Poisson SD
 ```{r N-HSMM-Poisson}
-bootstrap.N.HSMM.POISSON <- function(data, nclust, R) {
+bootstrap.N.HSMM.POISSON <- function(data, states, R) {
   master = list()
   cores <- ifelse(detectCores() > 6,
-                  cores <- 6,
-                  cores <- 4)
+                  cores <- 3,
+                  cores <- 3)
   cl <- makeCluster(cores)
   registerDoParallel(cl)
-  master <- append(master, foreach(num = 2:nclust) %dopar% {
+  master <- append(master, foreach(num = 2:states) %dopar% {
     require(mhsmm)
 
     hsmmAIC <- function(model) {
@@ -350,8 +400,7 @@ bootstrap.N.HSMM.POISSON <- function(data, nclust, R) {
       dens.emis = dmvnorm.hsmm,
       mstep = mstep.mvnorm)
 
-    mod.hsmm <- hsmmfit(matrix(unlist(data),ncol = 2),
-                        start.val, mstep = mstep.mvnorm)
+    mod.hsmm <- hsmmfit(matrix(unlist(data),ncol = 2), start.val, mstep = mstep.mvnorm)
     mu.boot <- matrix(NA, K * 2, R)
     sigma.boot <- matrix(NA, K * 4, R)
     for (b in 1:R){
@@ -367,7 +416,10 @@ bootstrap.N.HSMM.POISSON <- function(data, nclust, R) {
           type = mod.hsmm$model$sojourn$type),
         dens.emis = dmvnorm.hsmm,
         mstep = mstep.mvnorm)
-      mod.boot <- hsmmfit(matrix(unlist(data),ncol=2), true.par, mstep = mstep.mvnorm)
+
+      train <- simulate(true.par, nsim = 100, seed = b, rand.emis = rmvnorm.hsmm)
+
+      mod.boot <- hsmmfit(train, true.par, mstep = mstep.mvnorm)
       mu.boot[, b] <- unlist(mod.boot$model$parms.emission$mu)
       sigma.boot[, b] <- unlist(mod.boot$model$parms.emission$sigma)
     }
@@ -386,7 +438,7 @@ bootstrap.N.HSMM.POISSON <- function(data, nclust, R) {
   stopCluster(cl)
   return(master)
 }
-load("~/data/N-HSMM-2-4-Poisson.RData")
+load("~/N-HSMM-2-4-Poisson.RData")
 ```
 
 ```{r logLik HSMM-Poisson}
@@ -410,6 +462,7 @@ plot(HSMM[[3]]$model$loglik,
      xlim=c(0,30),
      main="4 states LogLik")
 ```
+
 ```{r Poisson-SD}
 par(mfrow=c(3,1))
 plot(HSMM[[1]]$model,xlim=c(0,550))
@@ -435,17 +488,54 @@ plot(newDF[,1],
      ylab=colnames(newDF)[1])
 ```
 
+```{r NASDAQ-HSMM, message=FALSE, warning=FALSE, paged.print=TRUE}
+p1<-ggplot(StockReturns2, aes(x=NASDAQ)) +
+  geom_histogram(aes(y =..density..),
+                 color="black", fill="white", binwidth=.1) +
+  theme_minimal()+
+  stat_function(fun = dnorm, args = list(mean = HSMM[[1]]$means.mean[1],
+                                         sd = HSMM[[1]]$sigma.mean[1]), colour="red")+
+  stat_function(fun = dnorm, args = list(mean = HSMM[[1]]$means.mean[3],
+                                         sd = HSMM[[1]]$sigma.mean[5]), colour="green")
+
+p2<-ggplot(StockReturns2, aes(x=NASDAQ)) +
+  geom_histogram(aes(y =..density..),
+                 color="black", fill="white", binwidth=.1) +
+  theme_minimal()+
+  stat_function(fun = dnorm, args = list(mean = HSMM[[2]]$means.mean[1],
+                                         sd = HSMM[[2]]$sigma.mean[1]), colour="red")+
+  stat_function(fun = dnorm, args = list(mean = HSMM[[2]]$means.mean[3],
+                                         sd = HSMM[[2]]$sigma.mean[5]), colour="green")+
+  stat_function(fun = dnorm, args = list(mean = HSMM[[2]]$means.mean[5],
+                                         sd = HSMM[[2]]$sigma.mean[9]), colour="yellow")
+
+p3<-ggplot(StockReturns2, aes(x=NASDAQ)) +
+  geom_histogram(aes(y =..density..),
+                 color="black", fill="white", binwidth=.1) +
+  theme_minimal()+
+  stat_function(fun = dnorm, args = list(mean = HSMM[[3]]$model$model$parms.emission$mu[[1]][1],
+                                         sd = HSMM[[3]]$model$model$parms.emission$sigma[[1]][1]), colour="red")+
+  stat_function(fun = dnorm, args = list(mean = HSMM[[3]]$model$model$parms.emission$mu[[2]][1],
+                                         sd = HSMM[[3]]$model$model$parms.emission$sigma[[2]][1]), colour="green")+
+  stat_function(fun = dnorm, args = list(mean = HSMM[[3]]$model$model$parms.emission$mu[[3]][1],
+                                         sd = HSMM[[3]]$model$model$parms.emission$sigma[[3]][1]), colour="yellow")+
+  stat_function(fun = dnorm, args = list(mean = HSMM[[3]]$model$model$parms.emission$mu[[4]][1],
+                                         sd = HSMM[[3]]$model$model$parms.emission$sigma[[4]][1]), colour="blue")
+
+grid.arrange(p1, p2, p3, ncol=1)
+```
+
 ## Gamma SD
 
 ```{r N-HSMM-Gamma}
-bootstrap.N.HSMM.GAMMA <- function(data, nclust, R) {
+bootstrap.N.HSMM.GAMMA <- function(data, states, R) {
   master = list()
   cores <- ifelse(detectCores() > 6,
                   cores <- 6,
                   cores <- 4)
   cl <- makeCluster(cores)
   registerDoParallel(cl)
-  master <- append(master, foreach(num = 2:nclust) %dopar% {
+  master <- append(master, foreach(num = 2:states) %dopar% {
     require(mhsmm)
     
     hsmmAIC <- function(model) {
@@ -496,8 +586,8 @@ bootstrap.N.HSMM.GAMMA <- function(data, nclust, R) {
       parms.emis = list(mu = km.means.list,
                         sigma = sigma.list),
       
-      sojourn = list(shape = c(1,2,3),
-                     scale = c(1,2,3),
+      sojourn = list(shape = as.vector(sample(1:100,K)),
+                     scale = as.vector(sample(1:10,K)),
                      type = "gamma"),
       
       dens.emis = dmvnorm.hsmm,
@@ -523,7 +613,9 @@ bootstrap.N.HSMM.GAMMA <- function(data, nclust, R) {
         dens.emis = dmvnorm.hsmm,
         mstep = mstep.mvnorm)
       
-      mod.boot <- hsmmfit(matrix(unlist(data),ncol=2), true.par, mstep = mstep.mvnorm)
+      train <- simulate(true.par, nsim = 100, seed = b, rand.emis = rmvnorm.hsmm)
+      
+      mod.boot <- hsmmfit(train, true.par, mstep = mstep.mvnorm)
       mu.boot[, b] <- unlist(mod.boot$model$parms.emission$mu)
       sigma.boot[, b] <- unlist(mod.boot$model$parms.emission$sigma)
     }
@@ -531,10 +623,10 @@ bootstrap.N.HSMM.GAMMA <- function(data, nclust, R) {
     return(list(
       k = num,
       model = mod.hsmm,
-      means.mean = matrix(apply(mu.boot, 1, mean), ncol = K * 2),
-      means.sd = mu.boot,
-      sigma.mean = matrix(apply(sigma.boot, 1, mean), ncol = K * 2 ** 2),
-      sigma.sd = sigma.boot,
+      means.mean = t(matrix(apply(mu.boot, 1, mean), ncol = K * 2)),
+      means.sd = t(matrix(apply(mu.boot, 1, sd), ncol = K * 2)),
+      sigma.mean = t(matrix(apply(sigma.boot, 1, mean), ncol = K * 2 ** 2)),
+      sigma.sd = t(matrix(apply(sigma.boot, 1, sd), ncol = K * 2 ** 2)),
       AIC = hsmmAIC(mod.hsmm),
       BIC = hsmmBIC(mod.hsmm)))
   }, length(master))
@@ -542,7 +634,7 @@ bootstrap.N.HSMM.GAMMA <- function(data, nclust, R) {
   stopCluster(cl)
   return(master)
 }
-load("~/data/N-HSMM-2-4-Gamma.RData")
+load("~/N-HSMM-2-4-Gamma.RData")
 ```
 
 ```{r logLik HSMM-Gamma}
