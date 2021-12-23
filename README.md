@@ -12,3 +12,4 @@ https://www.youtube.com/watch?v=ZEftL_fnNGQ
 - Draw Chart (HMM)
 - Cox Multivariate ggsurvplot
 - randomSurvivalforest
+- PCA
