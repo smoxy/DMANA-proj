@@ -23,8 +23,7 @@ source("https://raw.githubusercontent.com/Silvia-Pand/HMContMiss/main/prob_post_
 ############################## CLEANING ########################################
 pbcseq %<>%
             mutate(id = as.integer(id),
-                   age = as.integer(round(age)),
-                   trt = ifelse(trt==1,'D-penicillmain','placebo'),
+                   age = as.double(age+(day/365.25)),
                    ascites = as.factor(ascites),
                    hepato = as.factor(hepato),
                    spiders = as.factor(spiders),
@@ -45,20 +44,60 @@ densityplot(df1)
 pbcseq2 <- complete(df1,1)
 pbcseq2 <- cbind(pbcseq2,complete(df2,1))
 
-pbcseq2 %<>%
-  mutate(lbili = log(bili),
-         lalbumin = log(albumin),
-         lalk.phos = log(alk.phos),
-         lchol = log(chol),
-         lsgot = log(ast),
-         lplatelet = log(platelet),
-         lprotime = log(protime))
+
+pbcseq.forest <- pbcseq2 %>%
+                    mutate(id = as.integer(id),
+                           age = as.integer(round(age)),
+                           day = as.integer(day),
+                           status = ifelse(status!=0, status-1,0),
+                           ascites = ifelse(ascites==1,TRUE,FALSE),
+                           hepato = ifelse(hepato==1,TRUE,FALSE),
+                           spiders = ifelse(spiders==1,TRUE,FALSE),
+                           edema = as.factor(edema),
+                           sex = as.factor(sex),
+                           stage = as.factor(stage),
+                           lbili = log(bili),
+                           lalbumin = log(albumin),
+                           lalk.phos = log(alk.phos),
+                           lchol = log(chol),
+                           lsgot = log(ast),
+                           lplatelet = log(platelet),
+                           lprotime = log(protime),
+                           years = as.numeric(day/365)) %>%
+                    group_by(id) %>%
+                    filter(n()>= 5) %>%
+                    do(head(., n = 5)) %>%
+                    ungroup() %>%
+                    as.data.frame(.)
+
+
+#pbcseq.forest <- pbcseq.forest[-which(pbcseq.forest$day==0),]
+
+pbcseq.forest.train <- pbcseq.forest[c(-1:-150),]
+pbcseq.forest.test <- pbcseq.forest[-c(-1:-150),]
+
+pbcseq.mixture <-  pbcseq2 %>%
+                      mutate(lbili = log(bili),
+                             lalbumin = log(albumin),
+                             lalk.phos = log(alk.phos),
+                             lchol = log(chol),
+                             lsgot = log(ast),
+                             lplatelet = log(platelet),
+                             lprotime = log(protime))
+
+
 
 ################################### CLEANED DATA ###############################
 
-pbcseq3 <- pbcseq2 %>% group_by(id) %>% filter(n()>= 5) %>% do(head(., n = 5)) %>% ungroup()
-apply(is.na(pbcseq3), 2, which)
+pbcseq.mixture %<>%
+  group_by(id) %>%
+  #mutate(status = ifelse(status!=0, status-1,0)) %>%
+  filter(n()>= 5) %>%
+  do(head(., n = 5)) %>%
+  ungroup() %>%
+  as.data.frame(.)
 
+apply(is.na(pbcseq2), 2, which)
 ################################################################################
 
 #pbcseq %>% group_by(id) %>% mutate('AXA' = log(albumin)) %>% slice(1) %>% summary(.)
