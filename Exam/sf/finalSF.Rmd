@@ -1,0 +1,87 @@
+---
+title: "Untitled"
+author: "Simone Flavio Paris"
+date: "26/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+load(url("https://github.com/smoxy/DMANA-proj/blob/main/Exam/pbcseq.RData?raw=true%22"))
+source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/coreFunctions.R")
+loadPackages(c('ggplot2','survival','mice','magrittr','tidyverse','gamlss','LMest','ggpubr'))
+setwd('E:/[01] Università/LUMSA/Data Mining/Exam')
+#load('search.RData')
+load('models.RData')
+```
+
+Il dataset sul trial dei pazienti affetti da PBC (Primary Biliary cirrhosis) segue 312 individui con età media delle Femmine più bassa (49 anni) rispetto a quella dei Maschi (53 anni). Ogni individuo viene visitato di media 6 volte, indipendentemente dal genere. Le visite sono fatte 6 mesi dopo la prima, 1 anno dopo la prima e poi 1 anno una dall'altra.
+
+
+```{r Description, message=FALSE, warning=FALSE}
+length(unique(pbcseq[pbcseq$sex=='f','id']))  #Numero di Femmine: 276   88,46154%
+length(unique(pbcseq[pbcseq$sex!='f','id']))  #Numero di Maschi : 36    11,53846%
+median(pbcseq[pbcseq$sex=='f','age'])         #Età mediana Femmine: 49 anni
+median(pbcseq[pbcseq$sex!='f','age'])         #Età mediana Maschi : 50 anni e 6  mesi
+mean(pbcseq[pbcseq$sex=='f','age'])           #Età media Femmine: 49 anni
+mean(pbcseq[pbcseq$sex!='f','age'])           #Età media Maschi : 53 anni
+length(pbcseq[pbcseq$sex=='f','id'])/length(unique(pbcseq[pbcseq$sex=='f','id'])) #Visite medie fatte dalle Femmine: 6,18
+length(pbcseq[pbcseq$sex!='f','id'])/length(unique(pbcseq[pbcseq$sex!='f','id'])) #Visite medie fatte dai Maschi : 6,58
+arrange01
+```
+
+Riportiamo nella seguente tabella i risultati della procedura di fitting. Possiamo notare che con l'aumentare degli stati latenti nei modelli il **BIC** non aumenta più in modo considerevole e quindi abbiamo deciso di selezionare quello con **K = 5**
+
+```{r fitting states, message=FALSE, warning=FALSE}
+summary(p11.search)                     # TABLE 6
+plot(plot11, what='modSel')
+```
+
+Grazie alla seguente tabella sulle medie stimate dei biomarcatori, condizionati dalle covariate *sex* e *age*, possiamo dedurre che gli stati in cui la malattia la salute è peggiore sono il **4°** e il **5°**.
+
+Notiamo anche che nel 5° stato l'albumina (proteina trasportatore con il compito di legare diverse sostanze come la bilirubina) ha i valori medi più bassi, mentre ha i valori più alti di **tempo di protrombina** (tempo in secondi perché si formi un coagulo nel campione prelevato), valori molto alti di **fosfatasi alcalina** (indica un danno al fegato o la presenza di una malattia che aumenta l'attività delle cellule ossee) e di **transaminasi** (presenti nel fegato, quando i dotti si rompono esse si riversano nel sangue aumentandone la concentrazione).
+
+Possiamo immaginare che quindi l'ordine degli stati per salute decrescente sia: 4, 3, 1, 2.
+
+
+```{r Mu Table, message=FALSE, warning=FALSE}
+rownames(p11.mod02.difflogit.det4$Mu) = c('Bilirubin','Albumin','Alkaline','Cholesterol','Transaminase','Platelets','Prothrombin')
+p11.mod02.difflogit.det4$Mu             # TABLE 7
+```
+
+```{r transitions, message=FALSE, warning=FALSE}
+plot(p11.mod02.difflogit.det4, what = 'transitions')
+```
+La maggior parte dei pazienti (55%) all'inizio del trial li oserviamo nello stato 3 che definiremo come *Good*, il 27% nello stato *Best* e il 15% nello stato *Bad*, ma nessuno nello stato 5 *Worst*
+```{r Init prob, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+out <- with(pbcseq11,long2matrices(id = id,X = cbind(sex,age,trt),Y = status))
+X <- out$XX
+TT <- p11.mod02.difflogit.det4$TT
+X1 <- X[, 1, ]
+colnames(X1) <- c('sex','age','trt')
+#ind1 <- (X1[, 'sex'] == 1 | X1[, 'sex'] == 0)
+PI1 <- round(apply(p11.mod02.difflogit.det4$PI[ , , , 2:TT], c(1, 2), mean), 4) #transition probs
+init.trans.prob = rbind(round(colMeans(p11.mod02.difflogit.det4[["Piv"]],dims=1),4),PI1)
+colnames(init.trans.prob) = c('Good','Best','Bad','Worst')
+row.names(init.trans.prob) = c('init','Good','Best','Bad','Worst')
+init.trans.prob
+```
+La seguente tabella mostra le varianze stimate sulla diagonale principale, le covarianze sulla diagonale inferiore e le correlazioni sulla diagonale superiore, possiamo osservare:
+
+ + Che la *bilirubina* ha con il *tempo di protrombina* una buona correlazione positiva, mentre entrambe sono correlate negativamente con l'*Albumina*.
+ + Anche la *fosfatasi alcalina* è correlata positivamente con le *transaminasi* e le *piastrine*.
+```{r Var-cov-cor Table}
+rownames(p11.mod02.difflogit.det4$Si) = c('Bilirubin','Albumin','Alkaline','Cholesterol','Transaminase','Platelets','Prothrombin')
+colnames(p11.mod02.difflogit.det4$Si) = c('Bili','Albu','Alka','Chol','Trans','Plat','Proth')
+m = as.matrix(round(p11.mod02.difflogit.det4$Si,3))
+mcor = as.matrix(round(cov2cor(m),3))
+for (i in 1:length(m[1,])){
+  for (j in 1:length(m[,1])){
+    if (i<j){
+      m[i,j] = mcor[i,j]
+    }
+  }
+}
+m # TABLE 8
+```
