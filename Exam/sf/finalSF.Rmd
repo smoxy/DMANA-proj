@@ -12,7 +12,7 @@ source("https://raw.githubusercontent.com/MatteoFasulo/Rare-Earth/main/R/util/co
 loadPackages(c('ggplot2','survival','mice','magrittr','tidyverse','gamlss','LMest','ggpubr'))
 setwd('E:/[01] Università/LUMSA/Data Mining/Exam')
 #load('search.RData')
-load('models.RData')
+load(url("https://github.com/smoxy/DMANA-proj/blob/main/Exam/sf/models.RData?raw=true")
 ```
 
 Il dataset sul trial dei pazienti affetti da PBC (Primary Biliary cirrhosis) segue 312 individui con età media delle Femmine più bassa (49 anni) rispetto a quella dei Maschi (53 anni). Ogni individuo viene visitato di media 6 volte, indipendentemente dal genere. Le visite sono fatte 6 mesi dopo la prima, 1 anno dopo la prima e poi 1 anno una dall'altra.
